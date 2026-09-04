@@ -1,0 +1,17 @@
+{
+  "name": "ri-capacity-calendar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Appointment capacity calendar for SYR, WCH and BOH sales branches.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "npx --yes netlify-cli dev",
+    "build:artifact": "node tools/build-artifact.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}

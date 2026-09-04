@@ -1,0 +1,3238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Appointment capacity calendar for the SYR, WCH and BOH sales branches.">
+<!-- Where the shared-storage function answers. Change this if you route the
+     function somewhere else; nothing else in the page needs editing. -->
+<meta name="capacity-api" content="/api/capacity-state">
+<title>RI Capacity Calendar</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%97%93%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+/* ============================== TOKENS ============================== */
+:root{
+  --ground:#EDF1F6;
+  --surface:#FFFFFF;
+  --surface-2:#F5F8FB;
+  --surface-3:#E7EDF4;
+  --line:#D7DFEA;
+  --line-strong:#B9C6D7;
+  --ink:#16202F;
+  --ink-2:#4C5C72;
+  --ink-3:#7E8DA2;
+  --std:#1F7A8C;
+  --std-ink:#FFFFFF;
+  --std-soft:#DBEBEF;
+  --std-edge:#A9CFD7;
+  --prime:#B9722A;
+  --prime-ink:#FFFFFF;
+  --prime-soft:#F7E8D6;
+  --prime-edge:#E3C199;
+  --ok:#3C7F5B;
+  --ok-soft:#E0EFE7;
+  --warn:#B07A21;
+  --warn-soft:#F6EBD4;
+  --crit:#A94436;
+  --crit-soft:#F6E1DD;
+  --shadow:0 1px 2px rgba(20,32,48,.06), 0 8px 24px -12px rgba(20,32,48,.18);
+  --shadow-lg:0 2px 4px rgba(20,32,48,.08), 0 24px 48px -18px rgba(20,32,48,.28);
+  color-scheme:light;
+  --crit-ink:#FFFFFF;
+  --off-bg:#E3E8EF;
+  --off-line:#C6CFDB;
+  --blk-bg:#DCE3EE;
+  --blk-edge:#AFBDD0;
+  --blk-ink:#5A6B82;
+  --tint:rgba(20,32,48,.06);
+  --r:8px;
+  --r-lg:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0D131C;
+    --surface:#151E29;
+    --surface-2:#1B2733;
+    --surface-3:#22303E;
+    --line:#28364A;
+    --line-strong:#3A4B62;
+    --ink:#E4EAF2;
+    --ink-2:#A5B3C6;
+    --ink-3:#77879D;
+    --std:#4FB6C9;
+    --std-ink:#07242B;
+    --std-soft:#12333C;
+    --std-edge:#2C5F6C;
+    --prime:#E0A163;
+    --prime-ink:#2A1808;
+    --prime-soft:#2C2014;
+    --prime-edge:#6B4C24;
+    --ok:#63B489;
+    --ok-soft:#153026;
+    --warn:#D9A445;
+    --warn-soft:#33280F;
+    --crit:#D4705F;
+    --crit-soft:#361D18;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    --shadow-lg:0 2px 4px rgba(0,0,0,.5), 0 24px 48px -18px rgba(0,0,0,.7);
+    color-scheme:dark;
+    --crit-ink:#2A1210;
+    --off-bg:#1C2634;
+    --off-line:#2B3949;
+    --blk-bg:#202D3E;
+    --blk-edge:#35465C;
+    --blk-ink:#93A3B8;
+    --tint:rgba(255,255,255,.10);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0D131C;
+  --surface:#151E29;
+  --surface-2:#1B2733;
+  --surface-3:#22303E;
+  --line:#28364A;
+  --line-strong:#3A4B62;
+  --ink:#E4EAF2;
+  --ink-2:#A5B3C6;
+  --ink-3:#77879D;
+  --std:#4FB6C9;
+  --std-ink:#07242B;
+  --std-soft:#12333C;
+  --std-edge:#2C5F6C;
+  --prime:#E0A163;
+  --prime-ink:#2A1808;
+  --prime-soft:#2C2014;
+  --prime-edge:#6B4C24;
+  --ok:#63B489;
+  --ok-soft:#153026;
+  --warn:#D9A445;
+  --warn-soft:#33280F;
+  --crit:#D4705F;
+  --crit-soft:#361D18;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  --shadow-lg:0 2px 4px rgba(0,0,0,.5), 0 24px 48px -18px rgba(0,0,0,.7);
+    color-scheme:dark;
+    --crit-ink:#2A1210;
+    --off-bg:#1C2634;
+    --off-line:#2B3949;
+    --blk-bg:#202D3E;
+    --blk-edge:#35465C;
+    --blk-ink:#93A3B8;
+    --tint:rgba(255,255,255,.10);
+}
+
+/* ============================== BASE ============================== */
+*{box-sizing:border-box;}
+/* The gate and the app are both laid out with flex, and a bare `display:flex`
+   further down the sheet would otherwise beat the browser's own rule for
+   [hidden] — leaving whichever one is meant to be put away still taking up a
+   screenful of space above the other. */
+[hidden]{display:none !important;}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit;}
+button{cursor:pointer;background:none;border:none;padding:0;}
+:focus-visible{outline:2px solid var(--std);outline-offset:2px;border-radius:4px;}
+.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;}
+.eyebrow{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:10px;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);
+}
+h1,h2,h3{font-family:"Archivo",sans-serif;margin:0;text-wrap:balance;letter-spacing:-.015em;}
+
+/* ============================== SHELL ============================== */
+.app{min-height:100vh;display:flex;flex-direction:column;}
+
+.topbar{
+  display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+  padding:12px 20px;
+  background:var(--surface);
+  border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:40;
+}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0;}
+.brand h1{font-size:16px;font-weight:700;white-space:nowrap;}
+.qpick{
+  display:inline-flex;align-items:center;gap:1px;
+  border:1px solid var(--line);border-radius:99px;background:var(--surface-2);padding:1px;
+}
+.qpick select{
+  border:none;background:transparent;font-size:11.5px;font-weight:500;color:var(--ink);
+  padding:3px 4px;border-radius:99px;cursor:pointer;appearance:none;text-align:center;
+}
+.qpick select:hover{background:var(--surface-3);}
+.qnav{
+  width:20px;height:20px;border-radius:99px;color:var(--ink-3);
+  display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;
+}
+.qnav:hover:not(:disabled){background:var(--surface-3);color:var(--ink);}
+.qnav:disabled{opacity:.3;cursor:default;}
+.wtag{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:9.5px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink-3);border:1px solid var(--line);
+  border-radius:99px;padding:1px 7px;white-space:nowrap;
+}
+.spacer{flex:1 1 auto;}
+
+.railbtn{
+  display:none;align-items:center;gap:7px;
+  border:1px solid var(--line-strong);background:var(--surface);
+  padding:6px 12px;border-radius:99px;max-width:52vw;
+}
+.railbtn-who{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:12.5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.railbtn-caret{color:var(--ink-3);font-size:10px;line-height:1;}
+.rail .railseg{display:none;margin:12px 14px 4px;}
+.scrim{position:fixed;inset:0;background:rgba(10,16,24,.42);z-index:44;}
+
+.seg{display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:2px;gap:2px;}
+.seg button{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:12px;letter-spacing:.06em;
+  padding:6px 14px;border-radius:6px;color:var(--ink-2);transition:background .12s,color .12s;
+}
+.seg button:hover{color:var(--ink);}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
+.seg button .cnt{font-family:"IBM Plex Mono",monospace;font-weight:400;font-size:10px;color:var(--ink-3);margin-left:6px;}
+/* The company switcher is the outer choice: darker when active, so the branch
+   row beside it reads as living inside whatever is picked here. */
+.seg.co button[aria-pressed="true"]{background:var(--ink);color:var(--ground);}
+.seg.co button[aria-pressed="true"] .cnt{color:var(--ground);opacity:.65;}
+.seg.co button{letter-spacing:.02em;}
+
+.savebox{display:flex;align-items:center;gap:10px;}
+.savestate{font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.savestate .dot{width:7px;height:7px;border-radius:99px;background:var(--ok);flex:none;}
+.savestate.dirty .dot{background:var(--warn);}
+.savestate.err .dot{background:var(--crit);}
+.savestate.ro .dot{background:var(--ink-3);}
+
+.btn{
+  border:1px solid var(--line-strong);background:var(--surface);
+  padding:7px 14px;border-radius:var(--r);font-weight:500;font-size:13px;
+  transition:background .12s,border-color .12s,transform .06s;
+}
+.btn:hover{background:var(--surface-2);}
+.btn:active{transform:translateY(1px);}
+.btn:disabled{opacity:.45;cursor:default;}
+.btn.primary{background:var(--std);border-color:var(--std);color:var(--std-ink);font-weight:600;}
+.btn.primary:hover{filter:brightness(1.07);background:var(--std);}
+.btn.sm{padding:4px 10px;font-size:12px;}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2);}
+.btn.ghost:hover{background:var(--surface-2);color:var(--ink);}
+.btn.danger{color:var(--crit);border-color:var(--crit-soft);}
+.btn.danger:hover{background:var(--crit-soft);}
+
+/* ============================== BODY GRID ============================== */
+.main{display:grid;grid-template-columns:264px minmax(0,1fr);flex:1 1 auto;align-items:start;}
+@media (max-width:900px){ .main{grid-template-columns:1fr;} }
+
+/* ---------- roster rail ---------- */
+.rail{
+  border-right:1px solid var(--line);background:var(--surface);
+  position:sticky;top:57px;max-height:calc(100vh - 57px);overflow:auto;
+  display:flex;flex-direction:column;
+}
+@media (max-width:900px){
+  .main{grid-template-columns:minmax(0,1fr);}
+  .rail{
+    position:fixed;left:0;top:0;bottom:0;z-index:45;width:min(320px,86vw);max-height:none;
+    border-right:1px solid var(--line);box-shadow:var(--shadow-lg);
+    transform:translateX(-100%);transition:transform .18s ease;
+  }
+  .rail.open{transform:none;}
+  .rail .railseg{display:flex;}
+  .railbtn{display:inline-flex;}
+  .topbar .seg:not(.railseg){display:none;}
+  .topbar{padding:9px 12px;gap:10px;}
+  .brand h1{font-size:14px;}
+  .content{padding:14px 12px 48px;}
+  .dchip{padding:7px 15px;font-size:12.5px;}
+  .months button{padding:7px 15px;}
+}
+@media (min-width:901px){ .scrim{display:none;} }
+.rail-head{padding:14px 14px 8px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.rail-search{padding:0 14px 10px;}
+.rail-search input{
+  width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--surface-2);font-size:13px;
+}
+.rail-search input::placeholder{color:var(--ink-3);}
+.roster{list-style:none;margin:0;padding:0 8px 8px;display:flex;flex-direction:column;gap:1px;}
+.rep{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px;
+  padding:2px 4px 2px 8px;border-radius:var(--r);
+  border:1px solid transparent;transition:background .1s;
+}
+.rep:hover{background:var(--surface-2);}
+.rep[aria-current="true"]{background:var(--std-soft);border-color:var(--std-edge);}
+.repmain{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;
+  width:100%;text-align:left;padding:6px 4px;border-radius:6px;min-width:0;
+}
+.rep .nm{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rep[aria-current="true"] .nm{font-weight:600;}
+.pips{display:flex;gap:3px;}
+.pip{width:6px;height:6px;border-radius:99px;background:var(--surface-3);border:1px solid var(--line);}
+.pip.ok{background:var(--ok);border-color:var(--ok);}
+.pip.warn{background:var(--warn);border-color:var(--warn);}
+.pip.crit{background:var(--crit);border-color:var(--crit);}
+.repmenu{opacity:0;color:var(--ink-3);padding:2px 4px;border-radius:4px;line-height:1;font-size:15px;}
+.rep:hover .repmenu,.rep:focus-within .repmenu{opacity:1;}
+.repmenu:hover{background:var(--surface-3);color:var(--ink);}
+.rail-add{padding:10px 14px 16px;border-top:1px solid var(--line);margin-top:auto;display:flex;flex-direction:column;gap:8px;}
+.rail-add input{
+  width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface-2);
+}
+.rail-empty{padding:18px 16px;color:var(--ink-3);font-size:12.5px;line-height:1.6;}
+
+/* ---------- content ---------- */
+.content{padding:18px 20px 60px;min-width:0;}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap;}
+.tabs button{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:12.5px;letter-spacing:.02em;
+  padding:9px 14px;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.tabs button:hover{color:var(--ink);}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--std);}
+
+.pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px;}
+.pagehead h2{font-size:20px;font-weight:700;}
+.pagehead .sub{color:var(--ink-3);font-size:12.5px;margin-top:2px;}
+
+/* month tabs */
+.months{display:flex;gap:6px;flex-wrap:wrap;}
+.months button{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:12px;
+  border:1px solid var(--line);border-radius:99px;padding:5px 14px;color:var(--ink-2);background:var(--surface);
+}
+.months button:hover{border-color:var(--line-strong);color:var(--ink);}
+.months button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--ground);}
+.mdot{
+  width:6px;height:6px;border-radius:99px;display:inline-block;margin-left:7px;
+  background:var(--surface-3);border:1px solid var(--line-strong);vertical-align:middle;
+}
+.mdot.ok{background:var(--ok);border-color:var(--ok);}
+.mdot.warn{background:var(--warn);border-color:var(--warn);}
+.months button[aria-pressed="true"] .mdot{border-color:var(--ground);}
+
+/* always-visible key, instead of one buried under five week bands */
+.panel{
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);
+  margin-bottom:12px;
+}
+.panel > summary{
+  list-style:none;cursor:pointer;padding:9px 16px;display:flex;align-items:center;gap:10px;
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:10px;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);
+}
+.panel > summary::-webkit-details-marker{display:none;}
+.panel > summary:hover{color:var(--ink);}
+.panel > summary::after{content:"▾";margin-left:auto;font-size:11px;transition:transform .15s;}
+.panel[open] > summary::after{transform:rotate(180deg);}
+.panel > summary .sumnote{
+  font-family:"IBM Plex Sans",sans-serif;font-weight:400;font-size:11.5px;
+  letter-spacing:0;text-transform:none;color:var(--ink-3);
+}
+.panel .body{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:0 16px 11px;}
+.wm .need{font-size:11px;color:var(--warn);white-space:nowrap;}
+
+/* month summary strip */
+.msum{
+  display:flex;gap:22px;flex-wrap:wrap;align-items:center;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:14px 18px;margin-bottom:16px;box-shadow:var(--shadow);
+}
+.msum .grow{flex:1 1 220px;min-width:200px;}
+.bigstat{display:flex;align-items:baseline;gap:8px;}
+.bigstat .v{font-family:"Archivo",sans-serif;font-weight:700;font-size:26px;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.bigstat .of{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-3);}
+.meter{height:6px;border-radius:99px;background:var(--surface-3);overflow:hidden;margin-top:7px;position:relative;}
+.meter i{display:block;height:100%;border-radius:99px;transition:width .25s ease;}
+.meter i.ok{background:var(--ok);}
+.meter i.warn{background:var(--warn);}
+.meter i.std{background:var(--std);}
+.meter i.prime{background:var(--prime);}
+.tick{position:absolute;top:-2px;bottom:-2px;width:1.5px;background:var(--ink-3);opacity:.55;}
+
+/* ---------- week band ---------- */
+.week{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+  margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow);
+}
+.week-head{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--line);
+}
+.week-title{display:flex;align-items:baseline;gap:9px;}
+.week-title .n{font-family:"Archivo",sans-serif;font-weight:700;font-size:13px;}
+.week-title .rng{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3);}
+.wmeters{display:flex;gap:16px;align-items:center;margin-left:auto;flex-wrap:wrap;}
+.wm{display:flex;align-items:center;gap:8px;}
+.wm .lbl{font-family:"Archivo",sans-serif;font-weight:600;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);}
+.wm .val{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;}
+.wm .val.ok{color:var(--ok);}
+.wm .val.warn{color:var(--warn);}
+.wm .val.zero{color:var(--ink-3);}
+.wm .bar{width:64px;}
+.wactions{display:flex;gap:4px;}
+
+.grid{overflow-x:auto;}
+.gridin{min-width:640px;padding:0 0 2px;}
+.grow7{display:grid;grid-template-columns:52px repeat(7,minmax(0,1fr));}
+.dayhead{
+  padding:8px 6px 7px;text-align:center;border-bottom:1px solid var(--line);
+  border-left:1px solid var(--line);width:100%;display:block;
+  transition:background .12s,box-shadow .12s;
+}
+button.dayhead:not(:disabled){cursor:pointer;}
+button.dayhead:not(:disabled):hover{background:var(--surface-3);box-shadow:inset 0 -2px 0 var(--line-strong);}
+button.dayhead.wknd:not(:disabled):hover{background:color-mix(in srgb,var(--prime-soft) 80%,var(--surface-3));}
+button.dayhead.off:not(:disabled):hover{background:var(--off-line);}
+button.dayhead:disabled{cursor:default;}
+.dayhead:first-child{border-left:none;}
+.dayhead .dw{font-family:"Archivo",sans-serif;font-weight:600;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);}
+.dayhead .dd{font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:500;margin-top:1px;}
+.dayhead.wknd{background:var(--prime-soft);}
+.dayhead.wknd .dw{color:var(--prime);}
+.corner{border-bottom:1px solid var(--line);position:sticky;left:0;z-index:3;background:var(--surface);}
+
+.slotlbl{
+  display:flex;align-items:center;justify-content:flex-end;padding-right:9px;
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:10px;letter-spacing:.09em;
+  color:var(--ink-3);border-bottom:1px solid var(--line);height:38px;
+  position:sticky;left:0;z-index:3;background:var(--surface);
+}
+.row-pm .slotlbl{color:var(--prime);}
+.cellwrap{border-left:1px solid var(--line);border-bottom:1px solid var(--line);padding:3px;height:38px;}
+.cell{
+  width:100%;height:100%;border-radius:5px;border:1px solid var(--line);
+  background:var(--surface-2);display:flex;align-items:center;justify-content:center;
+  position:relative;transition:background .1s,border-color .1s,color .1s;
+}
+.cell{touch-action:pan-y;}
+.cell:hover{border-color:var(--line-strong);background:var(--surface-3);}
+.cell.prime{background:color-mix(in srgb,var(--prime-soft) 55%,var(--surface-2));border-color:var(--prime-edge);}
+.cell.prime:hover{background:color-mix(in srgb,var(--prime-soft) 85%,var(--surface-2));}
+.cell.on{background:var(--std);border-color:var(--std);color:var(--std-ink);}
+.cell.on:hover{background:var(--std);filter:brightness(1.08);}
+.cell.on.prime{background:var(--prime);border-color:var(--prime);color:var(--prime-ink);}
+.cell.on.prime:hover{background:var(--prime);filter:brightness(1.08);}
+.cell .mk{font-family:"Archivo",sans-serif;font-weight:700;font-size:12px;opacity:0;transform:scale(.6);transition:opacity .12s,transform .12s;}
+.cell.on .mk{opacity:1;transform:scale(1);}
+.cell[disabled]{cursor:default;opacity:.75;}
+.readonly .cell{cursor:default;}
+
+.legend{display:flex;gap:18px;flex-wrap:wrap;align-items:center;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2);}
+.lg{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-2);}
+.sw{width:14px;height:14px;border-radius:4px;border:1px solid var(--line);flex:none;}
+.sw.std{background:var(--std);border-color:var(--std);}
+.sw.prime{background:var(--prime);border-color:var(--prime);}
+.sw.primeempty{background:color-mix(in srgb,var(--prime-soft) 55%,var(--surface-2));border-color:var(--prime-edge);}
+
+/* scheduled days off */
+.dayoff-row{display:flex;gap:5px;flex-wrap:wrap;}
+.dchip{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.04em;
+  border:1px solid var(--line);border-radius:99px;padding:4px 13px;color:var(--ink-2);
+  background:var(--surface-2);transition:background .12s,border-color .12s,color .12s;
+}
+.dchip:hover:not(:disabled){border-color:var(--line-strong);color:var(--ink);}
+.dchip.on{
+  background:var(--off-bg);border-color:var(--line-strong);color:var(--ink-3);
+  text-decoration:line-through;text-decoration-thickness:1.5px;
+}
+.dchip:disabled{cursor:default;}
+.dayoff-note{font-size:11.5px;color:var(--ink-3);}
+
+.cellwrap.off{
+  padding:0;border-bottom-color:transparent;
+  background:repeating-linear-gradient(135deg,transparent 0 5px,var(--off-line) 5px 6px),var(--off-bg);
+}
+/* one specific date, rather than every week: flat, no hatching */
+.cellwrap.off.once{background:var(--off-bg);}
+.dayhead.off.once .dd::after{content:" ×";color:var(--crit);text-decoration:none;}
+.sw.once{background:var(--off-bg);border-color:var(--off-line);}
+.row-pm .cellwrap.off{border-bottom:1px solid var(--line);}
+.offlabel{
+  display:flex;align-items:center;justify-content:center;height:100%;padding:0 6px;
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:9px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink-3);text-align:center;line-height:1.3;
+}
+/* A company block. Distinct from a day off — that is the rep's own, this is
+   everyone's — so it reads as a labelled band rather than hatching. */
+.cellwrap.blk{
+  padding:0;border-bottom-color:transparent;position:relative;
+  background:var(--blk-bg);
+}
+.row-pm .cellwrap.blk{border-bottom:1px solid var(--line);}
+.blklabel{
+  display:flex;align-items:center;justify-content:center;height:100%;padding:0 5px;
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:9px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--blk-ink);text-align:center;line-height:1.25;
+  overflow:hidden;
+}
+.sw.blk{background:var(--blk-bg);border-color:var(--blk-edge);}
+/* Covers a blocked cell so a click gets an answer instead of silence. */
+.deadzone{position:absolute;inset:0;width:100%;height:100%;cursor:help;background:none;}
+.cellwrap.off,.cellwrap.blk{position:relative;}
+
+.blockform{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.blockform select,.blockform input{
+  padding:6px 9px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--surface-2);font-size:13px;
+}
+.blockform input[type="text"]{flex:1 1 220px;min-width:170px;}
+
+.dayhead.off{background:var(--off-bg);}
+.dayhead.off .dw,.dayhead.off .dd{color:var(--ink-3);}
+.dayhead.off .dd{text-decoration:line-through;text-decoration-thickness:1px;}
+.sw.off{background:var(--off-bg);border-color:var(--off-line);}
+
+/* time off */
+.tocard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 16px;box-shadow:var(--shadow);}
+.tocard label{display:block;margin-bottom:6px;}
+.tocard textarea{
+  width:100%;min-height:74px;resize:vertical;padding:9px 11px;border:1px solid var(--line);
+  border-radius:var(--r);background:var(--surface-2);line-height:1.5;
+}
+.tocard textarea::placeholder{color:var(--ink-3);}
+
+/* ---------- coverage heatmap ---------- */
+.hm{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden;}
+.hmscroll{overflow-x:auto;padding:14px;}
+.hmin{min-width:900px;display:flex;flex-direction:column;gap:14px;}
+.hmweek{display:grid;grid-template-columns:52px repeat(7,minmax(0,1fr));gap:3px;}
+.hmweek .wlab{
+  grid-column:1/-1;font-family:"Archivo",sans-serif;font-weight:600;font-size:10px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:1px;
+}
+.hmweek .rl{
+  display:flex;align-items:center;justify-content:flex-end;padding-right:8px;
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:10px;letter-spacing:.09em;color:var(--ink-3);
+  position:sticky;left:0;z-index:3;background:var(--surface);
+}
+.hmweek .dh{text-align:center;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-3);padding-bottom:2px;}
+.hmweek .dh.wknd{color:var(--prime);font-weight:600;}
+.hmcell{
+  height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;
+  font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;
+  border:1px solid transparent;position:relative;transition:transform .08s;
+}
+.hmcell:hover{transform:scale(1.06);z-index:2;box-shadow:var(--shadow);}
+.hmcell[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:1px;}
+.hmcell.z{color:var(--ink-3);background:var(--surface-2);border-color:var(--line);}
+.hmscale{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface-2);flex-wrap:wrap;}
+.hmscale .steps{display:flex;gap:2px;}
+.hmscale .steps i{width:22px;height:12px;display:block;border-radius:2px;border:1px solid var(--line);}
+.detail{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 16px;margin-top:14px;box-shadow:var(--shadow);}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.chip{
+  font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);
+  background:var(--surface-2);
+}
+
+/* ---------- tables ---------- */
+.tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow-x:auto;}
+table{border-collapse:collapse;width:100%;min-width:720px;}
+thead th{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);
+  background:var(--surface-2);position:sticky;top:0;white-space:nowrap;
+}
+thead th.num{text-align:right;}
+tbody td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:var(--surface-2);}
+td.num{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;}
+.namecell{font-weight:500;white-space:nowrap;}
+.dual{display:flex;flex-direction:column;gap:5px;min-width:112px;}
+.dualrow{display:flex;align-items:center;gap:8px;}
+.dualrow .k{font-family:"Archivo",sans-serif;font-size:9.5px;font-weight:600;letter-spacing:.09em;color:var(--ink-3);width:38px;}
+.dualrow .n{font-family:"IBM Plex Mono",monospace;font-size:11.5px;font-variant-numeric:tabular-nums;width:44px;}
+.dualrow .n.ok{color:var(--ok);font-weight:600;}
+.dualrow .n.warn{color:var(--warn);}
+.dualrow .n.zero{color:var(--ink-3);}
+.dualrow .bar{flex:1;}
+.status{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:10.5px;letter-spacing:.05em;
+  padding:3px 9px;border-radius:99px;white-space:nowrap;display:inline-block;
+}
+.status.none{background:var(--surface-3);color:var(--ink-3);}
+.status.short{background:var(--warn-soft);color:var(--warn);}
+.status.met{background:var(--ok-soft);color:var(--ok);}
+.status.appr{background:var(--std-soft);color:var(--std);}
+button.status{border:1px solid transparent;transition:box-shadow .12s,border-color .12s;}
+button.status:hover:not(:disabled){border-color:currentColor;box-shadow:inset 0 0 0 99px var(--tint);}
+select.st{
+  border:1px solid var(--line);border-radius:99px;padding:3px 8px;background:var(--surface-2);
+  font-size:11.5px;font-family:"Archivo",sans-serif;font-weight:600;letter-spacing:.03em;
+}
+
+/* ---------- misc ---------- */
+.empty{
+  background:var(--surface);border:1px dashed var(--line-strong);border-radius:var(--r-lg);
+  padding:38px 26px;text-align:center;color:var(--ink-3);
+}
+.empty h3{font-size:15px;color:var(--ink);margin-bottom:6px;}
+.empty p{margin:0 auto;max-width:44ch;line-height:1.6;font-size:13px;}
+.banner{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:10px 14px;border-radius:var(--r);margin-bottom:14px;font-size:13px;
+  border:1px solid var(--warn);background:var(--warn-soft);color:var(--warn);
+}
+.banner.bad{border-color:var(--crit);background:var(--crit-soft);color:var(--crit);}
+.banner .spacer{flex:1;}
+
+.pop{
+  position:fixed;z-index:80;background:var(--surface);border:1px solid var(--line-strong);
+  border-radius:var(--r);box-shadow:var(--shadow-lg);padding:5px;min-width:172px;
+  display:flex;flex-direction:column;gap:1px;
+}
+.pop button{padding:7px 10px;border-radius:5px;text-align:left;font-size:13px;}
+.pop button:hover{background:var(--surface-2);}
+.pop button.danger{color:var(--crit);}
+.pop button.danger:hover{background:var(--crit-soft);}
+.pop .sep{height:1px;background:var(--line);margin:4px 2px;}
+.pop input{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:5px;background:var(--surface-2);}
+.pop .ttl{font-size:11.5px;color:var(--ink-3);padding:5px 8px 3px;}
+.pop .rowbtns{display:flex;gap:6px;padding:6px 4px 2px;}
+.themerow{display:flex;gap:3px;padding:2px 4px 4px;}
+.themerow button{
+  flex:1;text-align:center;padding:6px 4px;border-radius:5px;font-size:12px;
+  border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);
+}
+.themerow button:hover{border-color:var(--line-strong);color:var(--ink);background:var(--surface-3);}
+.themerow button[aria-pressed="true"]{
+  background:var(--ink);border-color:var(--ink);color:var(--ground);font-weight:600;
+}
+
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);
+  background:var(--ink);color:var(--ground);padding:9px 18px;border-radius:99px;
+  font-size:13px;box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;
+  transition:opacity .18s,transform .18s;z-index:90;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast{display:flex;align-items:center;gap:14px;}
+.toast button{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:12px;letter-spacing:.05em;
+  text-transform:uppercase;color:inherit;border:1px solid currentColor;border-radius:99px;
+  padding:3px 11px;opacity:.85;
+}
+.toast button:hover{opacity:1;}
+
+/* one rep opening their own link sees only their own calendar */
+body.focus-rep .rail,
+body.focus-rep #railBtn,
+body.focus-rep #branchSeg,
+body.focus-rep .scrim{display:none !important;}
+body.focus-rep .main{grid-template-columns:minmax(0,1fr);}
+.linkrow{display:flex;gap:6px;padding:4px 4px 2px;}
+.linkrow input{flex:1;font-size:12px;font-family:"IBM Plex Mono",monospace;}
+.toast.bad{background:var(--crit);color:var(--crit-ink);}
+
+/* ---------- the way in ----------
+   Nothing about the calendar is on screen, or in memory, until the code checks
+   out with the server — so this is a plain front door, not a curtain. */
+.gate{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:24px;background:var(--ground);
+}
+.gatecard{
+  width:100%;max-width:352px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-lg);padding:28px 26px 24px;
+  display:flex;flex-direction:column;gap:12px;
+}
+.gatecard h1{font-size:19px;font-weight:700;letter-spacing:-.02em;}
+.gatesub{margin:0;color:var(--ink-3);font-size:13px;line-height:1.5;}
+.gatecard input[type="password"]{
+  width:100%;padding:11px 13px;border:1px solid var(--line-strong);
+  border-radius:var(--r);background:var(--surface-2);font-size:15px;
+  letter-spacing:.02em;margin-top:4px;
+}
+.gatecard input[type="password"]::placeholder{color:var(--ink-3);letter-spacing:0;}
+.gateremember{
+  display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);
+}
+.gateremember input{width:auto;margin:0;}
+.gatecard .btn{width:100%;padding:10px 14px;font-size:14px;justify-content:center;}
+.gatecard .btn:disabled{opacity:.55;}
+.gateerr{
+  margin:0;font-size:12.5px;color:var(--crit);
+  background:var(--crit-soft);border:1px solid var(--crit);
+  border-radius:var(--r);padding:8px 11px;line-height:1.45;
+}
+@media (max-width:900px){
+  .gatecard{padding:24px 20px 20px;}
+}
+
+/* Phone sizing, last in the cascade so it beats the desktop rules above.
+   Fingers need a bigger target than a pointer, and every row of chrome above
+   the grid is a row the rep has to scroll past before they can do anything. */
+@media (max-width:900px){
+  .cellwrap,.slotlbl{height:52px;}
+  .cell .mk{font-size:14px;}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;margin-bottom:12px;}
+  .tabs button{white-space:nowrap;padding:9px 12px;}
+  .panel > summary{padding:10px 14px;}
+  .panel .body{padding:0 14px 11px;}
+  .pagehead{margin-bottom:10px;gap:10px;}
+  .pagehead h2{font-size:18px;}
+  .pagehead .sub{font-size:12px;}
+  .msum{
+    display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;
+    padding:12px 14px;margin-bottom:10px;
+  }
+  .msum .grow{min-width:0;flex:none;}
+  .msum > div:last-child{grid-column:1 / -1;}
+  .bigstat .v{font-size:22px;}
+  .bigstat .of{font-size:11px;}
+  .week-head{padding:9px 12px;gap:10px;}
+  .wmeters{gap:10px 14px;width:100%;margin-left:0;}
+  .wactions{margin-left:auto;}
+
+  /* Two deliberate rows, not whatever flex-wrap happens to give: left to itself
+     the header gained a third row as soon as the current rep's name got long,
+     pushing the grid off the bottom of the screen for some reps and not others. */
+  .topbar{
+    display:grid;align-items:center;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:"brand save" "rail rail";
+    row-gap:8px;column-gap:10px;
+  }
+  .topbar .brand{grid-area:brand;min-width:0;}
+  .topbar .brand h1{overflow:hidden;text-overflow:ellipsis;}
+  .topbar .savebox{grid-area:save;gap:6px;}
+  .topbar .spacer{display:none;}
+  .railbtn{grid-area:rail;max-width:none;width:100%;justify-content:space-between;}
+  .savebox .btn{padding:6px 11px;}
+  /* The dot carries the state, saves toast, and anything that needs a sentence
+     gets a banner over the grid — a phone header has no width for prose. */
+  .savestate #saveText{display:none;}
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.01ms !important;transition-duration:.01ms !important;}
+}
+</style>
+<script>
+/* Theme, applied before the page paints. Three states: "light" and "dark" stamp
+   data-theme on the root and win over the system setting; "system" removes it
+   and lets prefers-color-scheme decide. Kept per device, not in the shared data
+   — one person's choice is not everyone's. */
+(function(){
+  var t=null;
+  try{ t=localStorage.getItem("ri-capacity-calendar/theme"); }catch(e){}
+  /* Light is the default rather than the device setting — most people here are
+     on a bright office screen, and "System" is one click away if they want it. */
+  document.documentElement.setAttribute("data-theme", t==="dark" ? "dark" : t==="system" ? "" : "light");
+  if(t==="system") document.documentElement.removeAttribute("data-theme");
+})();
+</script>
+</head>
+<body>
+
+<div class="gate" id="gate" hidden>
+  <form class="gatecard" id="gateForm" autocomplete="off">
+    <h1>RI Capacity Calendar</h1>
+    <p class="gatesub">Enter the access code to open the calendar.</p>
+    <input id="gateCode" type="password" inputmode="text" autocomplete="off"
+           aria-label="Access code" placeholder="Access code" required>
+    <label class="gateremember"><input id="gateRemember" type="checkbox" checked><span>Remember on this device</span></label>
+    <button class="btn primary" id="gateGo" type="submit">Open calendar</button>
+    <p class="gateerr" id="gateErr" role="alert" hidden></p>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <h1>RI Capacity Calendar</h1>
+      <span class="qpick">
+        <button class="qnav" id="qPrev" aria-label="Previous quarter">&lsaquo;</button>
+        <select id="qSel" class="mono" aria-label="Quarter"></select>
+        <button class="qnav" id="qNext" aria-label="Next quarter">&rsaquo;</button>
+      </span>
+    </div>
+    <button class="railbtn" id="railBtn" aria-expanded="false" aria-controls="rail">
+      <span class="railbtn-who" id="railBtnWho">Reps</span>
+      <span class="railbtn-caret">&#9662;</span>
+    </button>
+    <div class="seg co" id="divSeg" role="group" aria-label="Company"></div>
+    <div class="seg" id="branchSeg" role="group" aria-label="Branch"></div>
+    <div class="spacer"></div>
+    <div class="savebox">
+      <span class="savestate" id="saveState"><span class="dot"></span><span id="saveText">All changes saved</span></span>
+      <button class="btn" id="moreBtn" aria-label="More actions" aria-haspopup="menu">&#8943;</button>
+      <button class="btn primary" id="saveBtn" disabled>Save</button>
+    </div>
+  </header>
+
+  <div class="scrim" id="scrim" hidden></div>
+
+  <div class="main">
+    <aside class="rail" id="rail">
+      <div class="seg railseg co" id="divSegMobile" role="group" aria-label="Company"></div>
+      <div class="seg railseg" id="branchSegMobile" role="group" aria-label="Branch"></div>
+      <div class="rail-head">
+        <span class="eyebrow" id="railTitle">SYR Roster</span>
+        <span class="eyebrow mono" id="railCount">0</span>
+      </div>
+      <div class="rail-search"><input id="repFilter" type="search" placeholder="Filter reps" aria-label="Filter reps"></div>
+      <ul class="roster" id="roster"></ul>
+      <div class="rail-add">
+        <input id="newRep" type="text" placeholder="Add a sales rep&hellip;" aria-label="New rep name">
+        <button class="btn sm" id="addRepBtn">Add rep to <span id="addRepBranch">SYR</span></button>
+      </div>
+    </aside>
+
+    <section class="content">
+      <nav class="tabs" id="tabs" role="tablist"></nav>
+      <div id="view"></div>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script id="cc-seed" type="application/json">
+{"rev":0,"branches":[],"divisions":[],"blocks":[],"targets":{"weekTotal":12,"weekPrime":5,"monthTotal":50,"monthPrime":25}}
+</script>
+
+<script>
+(function(){
+"use strict";
+
+/* ===================== constants & helpers ===================== */
+var SLOTS = ["AM","MID","PM"];
+var DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+var DOW_FULL = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+/* Day-off chips read Monday first, the way a work week is described. */
+var DAYOFF_ORDER = [1,2,3,4,5,6,0];
+/* Quarters this calendar covers. Each quarter is three 5-week grids that chain
+   back-to-back, starting from the Sunday on or before the quarter's first day —
+   the same construction the source workbook used for Q3 2026. */
+var QUARTER_IDS = ["2026Q3","2026Q4","2027Q1","2027Q2","2027Q3","2027Q4"];
+
+/* The rosters, and the migrations that keep them current, live with the
+   function — see netlify/functions/roster.mjs. They work from lists of fifty-one
+   people's names, and anything in this file is public whatever the access code
+   says, so the server does that work and this page just renders what it is given.
+
+   Anywhere a whole state object replaces the live one — a restore, an import,
+   loading someone else's version — it still goes through here. */
+function adopt(s){ return s; }
+
+var THEME_KEY = "ri-capacity-calendar/theme";
+var THEMES = [["light","Light"],["dark","Dark"],["system","System"]];
+/* No stored choice means light, not the device setting. "system" is only ever
+   the answer when somebody has picked it. */
+function loadTheme(){
+  try{
+    var t=localStorage.getItem(THEME_KEY);
+    return (t==="dark"||t==="system") ? t : "light";
+  }catch(e){ return "light"; }
+}
+function applyTheme(t){
+  var r=document.documentElement;
+  if(t==="light"||t==="dark") r.setAttribute("data-theme",t);
+  else r.removeAttribute("data-theme");
+}
+function setTheme(t){
+  /* every choice is stored, including "system" and "light" — otherwise clearing
+     the key would be indistinguishable from never having chosen */
+  try{ localStorage.setItem(THEME_KEY,t); }catch(e){}
+  applyTheme(t);
+}
+function systemIsDark(){
+  try{ return window.matchMedia("(prefers-color-scheme: dark)").matches; }catch(e){ return false; }
+}
+/* Inside the claude.ai artifact viewer the shell stamps its own data-theme on
+   the root whenever the reader's site theme changes, which would quietly undo a
+   choice made here. Watch for that and put the explicit choice back — but only
+   an explicit one: on "system" the shell's stamp is exactly what we want. */
+function guardTheme(){
+  if(!window.MutationObserver) return;
+  var busy=false;
+  new MutationObserver(function(){
+    if(busy) return;
+    var want=loadTheme();
+    if(want==="system") return;
+    if(document.documentElement.getAttribute("data-theme")===want) return;
+    busy=true; applyTheme(want); busy=false;
+  }).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+}
+
+var BACKUP_KEY = "ri-capacity-calendar/backup";
+var UI_KEY = "ri-capacity-calendar/ui";
+
+function $(sel,root){ return (root||document).querySelector(sel); }
+function el(tag,cls,txt){ var n=document.createElement(tag); if(cls) n.className=cls; if(txt!=null) n.textContent=txt; return n; }
+function parseDate(s){ var p=s.split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
+function fmtISO(d){
+  var m=d.getMonth()+1, day=d.getDate();
+  return d.getFullYear()+"-"+(m<10?"0":"")+m+"-"+(day<10?"0":"")+day;
+}
+function addDays(d,n){ var x=new Date(d.getTime()); x.setDate(x.getDate()+n); return x; }
+function shortDate(d){ return MON[d.getMonth()]+" "+d.getDate(); }
+function slotKey(iso,slot){ return iso+"|"+slot; }
+function isPrime(iso,slot){ var dw=parseDate(iso).getDay(); return dw===0||dw===6||slot==="PM"; }
+/* Two ways a day can be off: a weekday blocked every week, or one specific date. */
+function isRecurringOff(rep,iso){ return !!(rep.daysOff && rep.daysOff[parseDate(iso).getDay()]); }
+function isDateOff(rep,iso){ return !!(rep.dateOff && rep.dateOff[iso]); }
+function isOffDay(rep,iso){ return isRecurringOff(rep,iso) || isDateOff(rep,iso); }
+/* single dates the rep has blocked inside one quarter, in order */
+function dateOffList(rep, q){
+  if(!rep.dateOff) return [];
+  var out=[];
+  q.months.forEach(function(m){
+    monthDates(m).forEach(function(iso){
+      if(rep.dateOff[iso] && out.indexOf(iso)<0) out.push(iso);
+    });
+  });
+  return out.sort();
+}
+function offDayCount(rep){
+  var n=0; for(var d=0;d<7;d++) if(rep.daysOff && rep.daysOff[d]) n++; return n;
+}
+
+/* ---------- blocked times ----------
+   A day off is one rep's own. A block is the company's: nobody in scope can be
+   booked then, whatever they have marked. Recurring blocks carry `dow`, one-off
+   blocks carry `date`; `slot` is one of AM/MID/PM or "*" for the whole day.
+   `scope` is a branch code, or "ALL". */
+/* ---------- companies ---------- */
+function divisionList(){ return (state && state.divisions) || []; }
+function divisionLabel(code){
+  var d=divisionList().filter(function(x){ return x.code===code; })[0];
+  return d ? d.label : code;
+}
+function divisionOf(code){
+  for(var i=0;i<state.branches.length;i++) if(state.branches[i].code===code) return state.branches[i].division||"KQ";
+  return "KQ";
+}
+function branchesIn(div){
+  return state.branches.filter(function(b){ return (b.division||"KQ")===div; });
+}
+/* A branch may carry a fuller name; a code with no name just shows its code. */
+function branchName(code){
+  var b=(state.branches||[]).filter(function(x){ return x.code===code; })[0];
+  return (b && b.name) || code;
+}
+function branchTitle(code){
+  var n=branchName(code);
+  return n!==code ? code+" · "+n : code;
+}
+
+function blockList(){ return (state && state.blocks) || []; }
+function blockMatches(bl, code, iso, slot){
+  /* scope is "ALL", a company code, or a branch code */
+  if(bl.scope!=="ALL" && bl.scope!==code && bl.scope!==divisionOf(code)) return false;
+  if(bl.slot!=="*" && bl.slot!==slot) return false;
+  if(bl.date) return bl.date===iso;
+  return bl.dow===parseDate(iso).getDay();
+}
+/* the block covering this slot for this branch, or null */
+function blockAt(code, iso, slot){
+  var all=blockList();
+  for(var i=0;i<all.length;i++) if(blockMatches(all[i],code,iso,slot)) return all[i];
+  return null;
+}
+function blockLabel(bl){ return (bl && String(bl.label||"").trim()) || "Blocked"; }
+function blockWhen(bl){
+  var when = bl.date ? DOW_FULL[parseDate(bl.date).getDay()]+" "+shortDate(parseDate(bl.date))
+                     : "Every "+DOW_FULL[bl.dow];
+  return when+" · "+(bl.slot==="*" ? "all slots" : bl.slot);
+}
+function blockScopeLabel(bl){
+  if(bl.scope==="ALL") return "Everyone";
+  if(divisionList().some(function(d){ return d.code===bl.scope; })) return divisionLabel(bl.scope)+" — all branches";
+  return branchTitle(bl.scope);
+}
+/* the branch a rep sits on — blocks are scoped by branch, the math is per rep */
+function branchCodeOf(rep){
+  for(var i=0;i<state.branches.length;i++){
+    var b=state.branches[i];
+    for(var j=0;j<b.reps.length;j++) if(b.reps[j].id===rep.id) return b.code;
+  }
+  return state.branches[0].code;
+}
+/* blocks that touch a given quarter, soonest first — one-offs outside it drop out */
+function blocksIn(code, q){
+  var dates={};
+  q.months.forEach(function(m){ monthDates(m).forEach(function(iso){ dates[iso]=1; }); });
+  return blockList().filter(function(bl){
+    if(bl.scope!=="ALL" && bl.scope!==code && bl.scope!==divisionOf(code)) return false;
+    return bl.date ? !!dates[bl.date] : true;
+  }).sort(function(a,z){
+    if(!!a.date !== !!z.date) return a.date ? 1 : -1;      /* recurring first */
+    if(a.date) return a.date < z.date ? -1 : 1;
+    return a.dow - z.dow;
+  });
+}
+function offDayNames(rep){
+  return DAYOFF_ORDER.filter(function(d){ return rep.daysOff && rep.daysOff[d]; })
+                     .map(function(d){ return DOW_FULL[d]; });
+}
+function uid(){ return "r"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function esc(s){ return String(s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+function buildQuarter(id){
+  var y=+id.slice(0,4), qn=+id.slice(5), firstMonth=(qn-1)*3;
+  var first=new Date(y,firstMonth,1);
+  var start=addDays(first,-first.getDay());          /* Sunday on or before the 1st */
+  var months=[];
+  for(var i=0;i<3;i++){
+    var m=new Date(y,firstMonth+i,1);
+    months.push({
+      key: m.getFullYear()+"-"+(m.getMonth()<9?"0":"")+(m.getMonth()+1),
+      label: MONTH_FULL[m.getMonth()]+" "+m.getFullYear(),
+      short: MONTH_FULL[m.getMonth()],
+      start: fmtISO(addDays(start,i*35))
+    });
+  }
+  return {id:id, label:"Q"+qn+" "+y, months:months};
+}
+function quarterSpan(q){
+  var a=parseDate(q.months[0].start);
+  return {from:a, to:addDays(a,104)};
+}
+function Q(){
+  var qs=state.quarters;
+  for(var i=0;i<qs.length;i++) if(qs[i].id===ui.quarter) return qs[i];
+  return qs[0];
+}
+/* The quarter grids run a week or two past the month, so "the current month" is
+   the one whose own key matches today — not whichever month the grid starts in. */
+function defaultMonthKey(q){
+  var now=new Date();
+  var key=now.getFullYear()+"-"+(now.getMonth()<9?"0":"")+(now.getMonth()+1);
+  var hit=q.months.filter(function(m){ return m.key===key; })[0];
+  return hit ? hit.key : q.months[0].key;
+}
+function defaultQuarterId(){
+  var now=new Date(); now.setHours(0,0,0,0);
+  for(var i=0;i<QUARTER_IDS.length;i++){
+    var sp=quarterSpan(buildQuarter(QUARTER_IDS[i]));
+    if(now>=sp.from && now<=sp.to) return QUARTER_IDS[i];
+  }
+  return QUARTER_IDS[0];
+}
+/* other quarters whose grids also contain any day of this week */
+function alsoIn(days){
+  var a=parseDate(days[0]), b=parseDate(days[6]), out=[];
+  state.quarters.forEach(function(q){
+    if(q.id===ui.quarter) return;
+    var sp=quarterSpan(q);
+    if(a<=sp.to && b>=sp.from) out.push(q.label);
+  });
+  return out;
+}
+
+/* month -> array of 5 weeks, each an array of 7 ISO dates */
+var weekCache = {};
+function weeksOf(month){
+  if(weekCache[month.key]) return weekCache[month.key];
+  var start = parseDate(month.start), out=[];
+  for(var w=0;w<5;w++){
+    var days=[];
+    for(var d=0;d<7;d++) days.push(fmtISO(addDays(start, w*7+d)));
+    out.push(days);
+  }
+  weekCache[month.key]=out;
+  return out;
+}
+function monthDates(month){
+  var out=[]; weeksOf(month).forEach(function(w){ out=out.concat(w); }); return out;
+}
+
+/* ===================== state ===================== */
+var state, ui, dirty=false, readOnly=false, canSave=true, saving=false, saveMode="files", artifactApi=null, pendingBackup=null;
+/* Where this copy of the page stores its data. Detected at boot:
+   "artifact" — running inside the claude.ai artifact viewer
+   "netlify"  — served by the Netlify site, talking to /api/state
+   "local"    — neither; this browser only                              */
+var MODE="local", passcode=null, requiresPasscode=false, bootState=null;
+var API=(document.querySelector('meta[name="capacity-api"]')||{}).content || "/api/capacity-state";
+var conflictState=null, newerRev=0, pollTimer=null;
+var PASS_KEY="ri-capacity-calendar/passcode";
+var VIEW_KEY="ri-capacity-calendar/viewcode";
+var viewCode=null, requiresViewCode=false;
+var undoStack=[], UNDO_MAX=12, autosaveTimer=null;
+var focusRepId=null, focusMiss=null, railOpen=false;
+
+function normalize(s){
+  /* v1 stored a single `quarter`; every version stores rep data keyed by date
+     and month, so quarters can be rebuilt from the catalog without touching it. */
+  s.quarters = QUARTER_IDS.map(buildQuarter);
+  delete s.quarter;
+  s.branches.forEach(function(b){
+    b.reps.forEach(function(r){
+      if(!r.slots) r.slots={};
+      if(!r.timeOff) r.timeOff={};
+      if(!r.status) r.status={};
+      if(!r.daysOff) r.daysOff={};
+      if(!r.dateOff) r.dateOff={};
+    });
+  });
+  if(!s.targets) s.targets={weekTotal:12,weekPrime:5,monthTotal:50,monthPrime:25};
+  if(!Array.isArray(s.divisions)) s.divisions=[];
+  s.branches.forEach(function(b){ if(!b.division) b.division="KQ"; });
+  if(!Array.isArray(s.blocks)) s.blocks=[];
+  s.blocks.forEach(function(b){
+    if(!b.id) b.id=uid();
+    if(!b.scope) b.scope="ALL";
+    if(!b.slot) b.slot="*";
+  });
+  return s;
+}
+
+function readSeed(){
+  try{ return normalize(JSON.parse($("#cc-seed").textContent)); }
+  catch(e){ console.error("seed parse failed",e); return null; }
+}
+
+function isNarrow(){ return window.matchMedia("(max-width:900px)").matches; }
+function loadUI(){
+  var wide=!isNarrow();
+  var d={division:"KQ",branch:"SYR",repId:null,view:"calendar",quarter:null,month:null,cov:null,covSel:null,filter:"",
+         panels:{key:wide, dayoff:wide}};
+  try{
+    var raw=sessionStorage.getItem(UI_KEY);
+    if(raw){ var p=JSON.parse(raw); for(var k in p) if(p[k]!==undefined) d[k]=p[k]; }
+    if(!d.panels) d.panels={key:wide, dayoff:wide};
+  }catch(e){}
+  return d;
+}
+function stashUI(){ try{ sessionStorage.setItem(UI_KEY, JSON.stringify(ui)); }catch(e){} }
+function backup(){ try{ localStorage.setItem(BACKUP_KEY, JSON.stringify(state)); }catch(e){} }
+
+/* ===================== math ===================== */
+/* A slot counts only if the rep marked it, is not off that day, and the company
+   has not blocked that time for their branch. Marks under a block are kept, just
+   not counted — lift the block and they come straight back. */
+function isAvailable(rep, iso, slot, code){
+  if(!rep.slots[slotKey(iso,slot)]) return false;
+  if(isOffDay(rep,iso)) return false;
+  return !blockAt(code||branchCodeOf(rep), iso, slot);
+}
+function countRange(rep, dates, code){
+  code = code || branchCodeOf(rep);
+  var t=0,p=0;
+  for(var i=0;i<dates.length;i++){
+    if(isOffDay(rep,dates[i])) continue;   /* scheduled day off — not available */
+    for(var j=0;j<SLOTS.length;j++){
+      if(blockAt(code,dates[i],SLOTS[j])) continue;
+      if(rep.slots[slotKey(dates[i],SLOTS[j])]){ t++; if(isPrime(dates[i],SLOTS[j])) p++; }
+    }
+  }
+  return {total:t, prime:p};
+}
+function monthCounts(rep, month, code){ return countRange(rep, monthDates(month), code); }
+function monthByKey(key){
+  var ms=Q().months;
+  for(var i=0;i<ms.length;i++) if(ms[i].key===key) return ms[i];
+  return ms[0];
+}
+function branchByCode(code){
+  for(var i=0;i<state.branches.length;i++) if(state.branches[i].code===code) return state.branches[i];
+  return state.branches[0];
+}
+function currentBranch(){ return branchByCode(ui.branch); }
+function currentRep(){
+  var b=currentBranch();
+  for(var i=0;i<b.reps.length;i++) if(b.reps[i].id===ui.repId) return b.reps[i];
+  return null;
+}
+/* compliance grade for a rep-month: none | short | met | appr */
+function grade(rep, month){
+  var c=monthCounts(rep,month), t=state.targets;
+  if(c.total===0) return "none";
+  if(rep.status && rep.status[month.key]==="approved") return "appr";
+  if(c.total>=t.monthTotal && c.prime>=t.monthPrime) return "met";
+  return "short";
+}
+var GRADE_LABEL={none:"Not started",short:"Short",met:"Meets target",appr:"Approved"};
+
+/* ===================== save ===================== */
+function setDirty(v){
+  dirty=v;
+  $("#saveBtn").disabled = !v || saving || readOnly || !canSave;
+  paintSaveState();
+  if(v){ backup(); scheduleAutosave(); }
+}
+/* Once we are allowed to write, saving stops being the user's job. */
+function autosaveReady(){
+  if(readOnly||!canSave||conflictState) return false;
+  if(MODE==="netlify")  return !requiresPasscode || !!passcode;
+  if(MODE==="artifact") return saveMode==="files";
+  return false;
+}
+function scheduleAutosave(){
+  if(!autosaveReady()) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer=setTimeout(function(){
+    if(dirty && !saving && !conflictState) save();
+  },2500);
+}
+function paintSaveState(){
+  var box=$("#saveState"), txt=$("#saveText"), cls="", msg="";
+  if(readOnly){ cls="ro"; msg="View only — changes aren't saved"; }
+  else if(!canSave){ cls="ro"; msg="Saving unavailable in this view"; }
+  else if(MODE==="netlify" && requiresPasscode && !passcode && !dirty){ cls="ro"; msg="Locked — passcode needed to save"; }
+  else if(saving){ cls="busy"; msg="Saving…"; }
+  else if(dirty){ cls="dirty"; msg=autosaveReady()?"Saving in a moment…":"Unsaved changes"; }
+  else msg = state.updatedAt ? "Saved "+relTime(state.updatedAt) : "All changes saved";
+  box.className="savestate"+(cls?" "+cls:"");
+  txt.textContent=msg;
+  /* a phone shows the dot alone for everything but a warning, so the words still
+     have to reach a screen reader and a long-press */
+  box.title=msg;
+  box.setAttribute("aria-label",msg);
+}
+function relTime(iso){
+  var d=new Date(iso), diff=(Date.now()-d.getTime())/1000;
+  if(diff<60) return "just now";
+  if(diff<3600) return Math.round(diff/60)+" min ago";
+  if(diff<86400) return Math.round(diff/3600)+" hr ago";
+  return d.toLocaleDateString(undefined,{month:"short",day:"numeric"});
+}
+
+function toast(msg,bad,actionLabel,actionFn){
+  var t=$("#toast");
+  t.textContent="";
+  t.appendChild(el("span",null,msg));
+  if(actionLabel && actionFn){
+    var a=el("button",null,actionLabel);
+    a.onclick=function(){ t.className="toast"+(bad?" bad":""); actionFn(); };
+    t.appendChild(a);
+  }
+  t.className="toast show"+(bad?" bad":"");
+  clearTimeout(t._t);
+  t._t=setTimeout(function(){ t.className="toast"+(bad?" bad":""); }, actionLabel?6500:3200);
+}
+
+function injectSeed(src, json){
+  var re=/(<script[^>]*id="cc-seed"[^>]*>)([\s\S]*?)(<\/script>)/;
+  if(!re.test(src)) throw {code:"invalid_content",message:"Could not find the data block in the page source."};
+  return src.replace(re, function(_,a,b,c){ return a+"\n"+json+"\n"+c; });
+}
+
+/* ---------- undo ----------
+   Every destructive action snapshots the whole state first. Cheap at this
+   size, and it means nothing a user clicks is unrecoverable. */
+function pushUndo(label){
+  try{ undoStack.push({label:label, json:JSON.stringify(state)}); }catch(e){ return; }
+  if(undoStack.length>UNDO_MAX) undoStack.shift();
+}
+function canUndo(){ return undoStack.length>0 && !readOnly; }
+function undo(){
+  if(!canUndo()) return;
+  var step=undoStack.pop();
+  var rev=state.rev;
+  try{ state=normalize(JSON.parse(step.json)); }catch(e){ toast("Couldn't undo that.",true); return; }
+  state.rev=rev;                 /* keep our place in the save sequence */
+  weekCache={};
+  setDirty(true); render();
+  toast("Undid: "+step.label);
+}
+
+/* ---------- passcode (Netlify mode) ---------- */
+function loadViewCode(){
+  try{ return sessionStorage.getItem(VIEW_KEY) || localStorage.getItem(VIEW_KEY) || null; }catch(e){ return null; }
+}
+function rememberViewCode(v, forever){
+  viewCode=v;
+  try{
+    sessionStorage.setItem(VIEW_KEY,v);
+    if(forever) localStorage.setItem(VIEW_KEY,v); else localStorage.removeItem(VIEW_KEY);
+  }catch(e){}
+}
+function forgetViewCode(){
+  viewCode=null;
+  try{ sessionStorage.removeItem(VIEW_KEY); localStorage.removeItem(VIEW_KEY); }catch(e){}
+}
+function loadPasscode(){
+  try{ return sessionStorage.getItem(PASS_KEY) || localStorage.getItem(PASS_KEY) || null; }catch(e){ return null; }
+}
+function rememberPasscode(v, forever){
+  passcode=v;
+  try{
+    sessionStorage.setItem(PASS_KEY,v);
+    if(forever) localStorage.setItem(PASS_KEY,v); else localStorage.removeItem(PASS_KEY);
+  }catch(e){}
+}
+function forgetPasscode(){
+  passcode=null;
+  try{ sessionStorage.removeItem(PASS_KEY); localStorage.removeItem(PASS_KEY); }catch(e){}
+  toast("Edit passcode forgotten on this device.");
+}
+function askPasscode(anchor, then){
+  var p=el("div");
+  p.appendChild(el("div","ttl","Editing this calendar needs the shared passcode."));
+  var inp=el("input"); inp.type="password"; inp.autocomplete="off"; inp.value=passcode||"";
+  p.appendChild(inp);
+  var remWrap=el("label"); remWrap.style.cssText="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--ink-2);padding:8px 4px 2px;";
+  var rem=el("input"); rem.type="checkbox"; rem.checked=true; rem.style.cssText="width:auto;padding:0;";
+  remWrap.appendChild(rem); remWrap.appendChild(el("span",null,"Remember on this device"));
+  p.appendChild(remWrap);
+  var btns=el("div","rowbtns");
+  var ok=el("button","btn sm primary","Unlock"); ok.style.flex="1";
+  var no=el("button","btn sm","Cancel");
+  function go(){
+    var v=inp.value.trim();
+    if(!v){ inp.focus(); return; }
+    rememberPasscode(v, rem.checked);
+    closePop();
+    if(then) then();
+  }
+  ok.onclick=go;
+  no.onclick=closePop;
+  inp.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); go(); } if(e.key==="Escape") closePop(); };
+  btns.appendChild(ok); btns.appendChild(no);
+  p.appendChild(btns);
+  popAt(anchor||$("#saveBtn"), p);
+  inp.focus(); inp.select();
+}
+
+function viewHeaders(){ return viewCode ? {"x-view-code":viewCode} : {}; }
+
+/* ---------- storage backends ---------- */
+var Backend={
+
+  /* Published as a claude.ai artifact: the page republishes itself. */
+  artifact:{
+    shared:true,
+    async load(){
+      try{
+        var r=await fetch("data/state.json",{cache:"no-store"});
+        if(r.ok){ var j=await r.json(); if(j && j.branches) return j; }
+      }catch(e){}
+      return null;
+    },
+    async save(next){
+      var json=JSON.stringify(next).replace(/</g,"\\u003c");
+      if(saveMode==="files"){
+        try{
+          await artifactApi.publish({"data/state.json":{content:json,contentType:"application/json"}});
+          return;
+        }catch(e){
+          var code=e&&e.code;
+          if(code==="capability_disabled"||code==="read_only_path"||code==="transform_error"||code==="invalid_content") saveMode="html";
+          else throw e;
+        }
+      }
+      var src=await fetch(location.href,{cache:"no-store"}).then(function(r){ return r.text(); });
+      if(!/^\s*<!doctype/i.test(src)) throw {code:"invalid_content",message:"The page source could not be read for saving."};
+      await artifactApi.publish(injectSeed(src,json));
+    }
+  },
+
+  /* Served by the Netlify site: one shared JSON blob behind /api/state. */
+  netlify:{
+    shared:true,
+    async load(){
+      if(bootState!==null){ var first=bootState; bootState=null; return first||null; }
+      var r=await fetch(API,{cache:"no-store",headers:viewHeaders()});
+      if(r.status===401) throw {code:"view_code"};
+      if(!r.ok) throw {code:"upstream_error",message:"The server returned "+r.status+"."};
+      var j=await r.json();
+      requiresPasscode=!!j.requiresPasscode;
+      return j.state||null;
+    },
+    async save(next, force){
+      var r=await fetch(API,{
+        method:"PUT",
+        headers:{"content-type":"application/json","x-edit-passcode":passcode||"","x-view-code":viewCode||""},
+        body:JSON.stringify({state:next, force:!!force})
+      });
+      if(r.status===401){ requiresPasscode=true; throw {code:"passcode"}; }
+      if(r.status===409){
+        var j=await r.json();
+        throw {code:"conflict", live:j.state};
+      }
+      if(r.status===413) throw {code:"too_large"};
+      if(!r.ok) throw {code:"upstream_error",message:"The server returned "+r.status+"."};
+      var okj=await r.json();
+      if(okj && okj.rev) next.rev=okj.rev;
+    }
+  },
+
+  /* Opened straight from disk, or the site's API is unreachable. */
+  local:{
+    shared:false,
+    async load(){ return null; },
+    async save(){ backup(); }
+  }
+};
+
+async function save(force){
+  force = force===true;
+  if(saving||readOnly||!canSave) return;
+  if(MODE==="netlify" && requiresPasscode && !passcode){ askPasscode($("#saveBtn"), function(){ save(force); }); return; }
+
+  saving=true; $("#saveBtn").disabled=true; paintSaveState();
+  var prevRev=state.rev||0;
+  state.rev=prevRev+1;
+  state.updatedAt=new Date().toISOString();
+  stashUI(); backup();
+
+  try{
+    await Backend[MODE].save(state, force);
+  }catch(e){
+    saving=false;
+    state.rev=prevRev;
+    handleSaveError(e);
+    return;
+  }
+  saving=false;
+  conflictState=null; newerRev=0;
+  setDirty(false); paintSaveState();
+  toast(Backend[MODE].shared ? "Saved. Everyone with the link sees this version." : "Saved in this browser.");
+  if(MODE==="netlify") render();
+}
+
+function handleSaveError(e){
+  var code=e&&e.code, msg=e&&e.message;
+
+  if(code==="passcode"){
+    setDirty(true);
+    askPasscode($("#saveBtn"), function(){ save(); });
+    toast("That passcode wasn't accepted.",true);
+    return;
+  }
+  if(code==="conflict"){
+    if(e.live){                                  /* Netlify: we hold their version */
+      conflictState=normalize(e.live);
+      setDirty(true); render();
+      return;
+    }
+    toast("Someone else saved first — reloading to their version.",true);
+    return;                                      /* artifact: the shell reloads this view */
+  }
+  if(code==="not_writer"||code==="not_granted"||code==="not_declared"||code==="consent_required"){
+    readOnly=true; setDirty(false); paintSaveState(); render();
+    toast("You have view-only access to this calendar.",true);
+    return;
+  }
+  if(code==="rate_limited") toast("Saving too quickly — wait a moment and try again.",true);
+  else if(code==="too_large") toast("This calendar is too large to save. Remove some reps or export a backup.",true);
+  else toast("Couldn't save: "+(msg||"unknown error")+". Your work is still here — try again.",true);
+  setDirty(true);
+}
+
+/* ---------- watch for saves made elsewhere (Netlify only) ---------- */
+function startPolling(){
+  if(MODE!=="netlify" || pollTimer) return;
+  pollTimer=setInterval(async function(){
+    if(saving||dirty||conflictState||document.hidden) return;
+    try{
+      var r=await fetch(API+"?meta=1",{cache:"no-store",headers:viewHeaders()});
+      if(!r.ok) return;
+      var j=await r.json();
+      if((j.rev||0) > (state.rev||0) && j.rev!==newerRev){ newerRev=j.rev; render(); }
+    }catch(e){}
+  },45000);
+}
+async function loadLatest(){
+  try{
+    var remote=await Backend[MODE].load();
+    if(remote){
+      state=adopt(normalize(remote),true);
+      weekCache={}; conflictState=null; newerRev=0;
+      setDirty(false); render();
+      toast("Loaded the latest saved version.");
+    }
+  }catch(e){ toast("Couldn't reach the server. Try again in a moment.",true); }
+}
+
+/* ===================== render: shell ===================== */
+var VIEWS=[
+  {id:"calendar", label:"Rep Calendar"},
+  {id:"coverage", label:"Branch Coverage"},
+  {id:"compliance", label:"Compliance"},
+  {id:"timeoff", label:"Time Off"},
+  {id:"blocks", label:"Blocked Times"}
+];
+
+function syncQuarterUI(){
+  var ids=state.quarters.map(function(q){ return q.id; });
+  if(ids.indexOf(ui.quarter)<0) ui.quarter=defaultQuarterId();
+  var keys=Q().months.map(function(m){ return m.key; });
+  if(keys.indexOf(ui.month)<0) ui.month=defaultMonthKey(Q());
+  if(keys.indexOf(ui.cov)<0) ui.cov=defaultMonthKey(Q());
+  /* a restore, import or removal can leave these pointing at things that are gone */
+  if(!divisionList().some(function(d){ return d.code===ui.division; })) ui.division=divisionList()[0].code;
+  if(!state.branches.some(function(b){ return b.code===ui.branch; })) ui.branch=state.branches[0].code;
+  /* the branch always belongs to the company on screen, whichever moved last */
+  ui.division = divisionOf(ui.branch);
+  var reps=currentBranch().reps;
+  if(!reps.some(function(r){ return r.id===ui.repId; })) ui.repId = reps.length ? reps[0].id : null;
+}
+function renderQuarterPicker(){
+  var sel=$("#qSel");
+  sel.textContent="";
+  state.quarters.forEach(function(q){
+    var op=el("option",null,q.label);
+    op.value=q.id;
+    if(q.id===ui.quarter) op.selected=true;
+    sel.appendChild(op);
+  });
+  var i=state.quarters.map(function(q){ return q.id; }).indexOf(ui.quarter);
+  $("#qPrev").disabled = i<=0;
+  $("#qNext").disabled = i>=state.quarters.length-1;
+}
+function setQuarter(id){
+  ui.quarter=id; ui.covSel=null;
+  var k=defaultMonthKey(Q());
+  ui.month=k; ui.cov=k;
+  stashUI(); render();
+}
+function stepQuarter(delta){
+  var ids=state.quarters.map(function(q){ return q.id; });
+  var i=ids.indexOf(ui.quarter)+delta;
+  if(i>=0 && i<ids.length) setQuarter(ids[i]);
+}
+
+/* Two companies, and they never share a view: pick one and the branch switcher
+   below it — and everything downstream — narrows to that company's branches. */
+function renderDivSeg(){
+  var divs=divisionList();
+  ["#divSeg","#divSegMobile"].forEach(function(sel){
+    var seg=$(sel); if(!seg) return;
+    seg.textContent="";
+    seg.hidden = divs.length<2;
+    divs.forEach(function(d){
+      var n=branchesIn(d.code).reduce(function(a,b){ return a+b.reps.length; },0);
+      var btn=el("button");
+      btn.setAttribute("aria-pressed", d.code===ui.division ? "true":"false");
+      btn.appendChild(el("span",null,d.label));
+      btn.appendChild(el("span","cnt mono",String(n)));
+      btn.title=d.label+" — "+branchesIn(d.code).length+" branches, "+n+" reps";
+      btn.onclick=function(){
+        if(ui.division===d.code) return;
+        ui.division=d.code;
+        var first=branchesIn(d.code)[0];
+        ui.branch = first ? first.code : ui.branch;
+        ui.repId = first && first.reps.length ? first.reps[0].id : null;
+        ui.covSel=null; stashUI(); render();
+      };
+      seg.appendChild(btn);
+    });
+  });
+}
+function renderBranchSeg(){
+  var mine=branchesIn(ui.division);
+  ["#branchSeg","#branchSegMobile"].forEach(function(sel){
+    var seg=$(sel); if(!seg) return;
+    seg.textContent="";
+    mine.forEach(function(b){
+      var btn=el("button");
+      btn.setAttribute("aria-pressed", b.code===ui.branch ? "true":"false");
+      btn.appendChild(el("span",null,b.code));
+      btn.appendChild(el("span","cnt mono",String(b.reps.length)));
+      btn.title=branchTitle(b.code)+" — "+b.reps.length+" rep"+(b.reps.length===1?"":"s");
+      btn.onclick=function(){
+        ui.branch=b.code;
+        ui.repId = b.reps.length ? b.reps[0].id : null;
+        ui.covSel=null; stashUI(); render();
+      };
+      seg.appendChild(btn);
+    });
+  });
+  var r=currentRep();
+  $("#railBtnWho").textContent = r ? r.name : ui.branch+" reps";
+}
+
+function setRail(open){
+  railOpen=open;
+  $("#rail").classList.toggle("open",open);
+  $("#scrim").hidden=!open;
+  $("#railBtn").setAttribute("aria-expanded",open?"true":"false");
+}
+
+function renderTabs(){
+  var t=$("#tabs"); t.textContent="";
+  if(focusRepId){ t.hidden=true; ui.view="calendar"; return; }
+  t.hidden=false;
+  VIEWS.forEach(function(v){
+    var b=el("button",null,v.label);
+    b.setAttribute("role","tab");
+    b.setAttribute("aria-selected", ui.view===v.id ? "true":"false");
+    b.onclick=function(){ ui.view=v.id; stashUI(); render(); };
+    t.appendChild(b);
+  });
+}
+
+function renderRoster(){
+  var b=currentBranch(), list=$("#roster");
+  $("#railTitle").textContent=branchName(b.code)+" Roster";
+  $("#addRepBranch").textContent=b.code;
+  var f=(ui.filter||"").trim().toLowerCase();
+  var reps=b.reps.filter(function(r){ return !f || r.name.toLowerCase().indexOf(f)>=0; });
+  $("#railCount").textContent = f ? reps.length+"/"+b.reps.length : String(b.reps.length);
+  list.textContent="";
+  if(!b.reps.length){
+    var li=el("li"); li.appendChild(el("div","rail-empty","No reps in "+b.code+" yet. Add one below and their calendar is ready to fill in."));
+    list.appendChild(li); return;
+  }
+  if(!reps.length){
+    var li2=el("li"); li2.appendChild(el("div","rail-empty","No reps match “"+f+"”."));
+    list.appendChild(li2); return;
+  }
+  reps.forEach(function(r){
+    var li=el("li");
+    var row=el("div","rep");
+    row.setAttribute("aria-current", r.id===ui.repId ? "true":"false");
+
+    var main=el("button","repmain");
+    main.appendChild(el("span","nm",r.name));
+    var pips=el("span","pips");
+    Q().months.forEach(function(m){
+      var g=grade(r,m);
+      var p=el("i","pip"+(g==="met"||g==="appr"?" ok":g==="short"?" warn":""));
+      p.title=m.short+": "+GRADE_LABEL[g];
+      pips.appendChild(p);
+    });
+    main.appendChild(pips);
+    main.onclick=function(){
+      ui.repId=r.id;
+      if(ui.view!=="calendar"&&ui.view!=="timeoff") ui.view="calendar";
+      setRail(false); stashUI(); render();
+    };
+    row.appendChild(main);
+
+    var menu=el("button","repmenu","⋯");
+    menu.title="Rep options";
+    menu.setAttribute("aria-label","Options for "+r.name);
+    menu.onclick=function(ev){ ev.stopPropagation(); openRepMenu(ev.currentTarget, r); };
+    row.appendChild(menu);
+
+    li.appendChild(row);
+    list.appendChild(li);
+  });
+}
+
+/* ===================== popovers ===================== */
+var openPop=null;
+function closePop(){ if(openPop){ openPop.remove(); openPop=null; document.removeEventListener("mousedown",onDocDown,true); } }
+function onDocDown(e){ if(openPop && !openPop.contains(e.target)) closePop(); }
+function popAt(anchor, node){
+  closePop();
+  node.className="pop";
+  document.body.appendChild(node);
+  var r=anchor.getBoundingClientRect();
+  var top=r.bottom+6, left=Math.min(r.left, window.innerWidth-node.offsetWidth-12);
+  if(top+node.offsetHeight>window.innerHeight-8) top=Math.max(8, r.top-node.offsetHeight-6);
+  node.style.top=top+"px"; node.style.left=Math.max(8,left)+"px";
+  openPop=node;
+  setTimeout(function(){ document.addEventListener("mousedown",onDocDown,true); },0);
+  return node;
+}
+
+function openRepMenu(anchor, rep){
+  if(readOnly){ toast("View-only access — the roster can't be changed.",true); return; }
+  var p=el("div");
+  var link=el("button",null,"Copy this rep's link");
+  link.onclick=function(){ showRepLink(anchor,rep); };
+  p.appendChild(link);
+
+  var rename=el("button",null,"Rename…");
+  rename.onclick=function(){ openRename(anchor,rep); };
+  p.appendChild(rename);
+
+  state.branches.filter(function(b){ return b.code!==ui.branch; }).forEach(function(b){
+    /* a move across companies is a real thing to do, but it should never happen
+       by accident — so it says which company it is landing in */
+    var far=(b.division||"KQ")!==ui.division;
+    var mv=el("button",null,"Move to "+(far ? divisionLabel(b.division||"KQ")+" · " : "")+branchTitle(b.code));
+    mv.onclick=function(){
+      pushUndo("Move "+rep.name+" to "+b.code);
+      var src=currentBranch();
+      src.reps=src.reps.filter(function(x){ return x.id!==rep.id; });
+      b.reps.push(rep);
+      if(ui.repId===rep.id) ui.repId = src.reps.length ? src.reps[0].id : null;
+      closePop(); setDirty(true); render();
+      toast(rep.name+" moved to "+(far ? divisionLabel(b.division||"KQ")+" · " : "")+branchTitle(b.code)+".", false, "Undo", undo);
+    };
+    p.appendChild(mv);
+  });
+
+  p.appendChild(el("div","sep"));
+  var clr=el("button",null,"Clear "+Q().label+" selections");
+  clr.onclick=function(){
+    pushUndo("Clear "+Q().label+" for "+rep.name);
+    var n=0;
+    Q().months.forEach(function(m){
+      monthDates(m).forEach(function(iso){
+        SLOTS.forEach(function(sl){
+          var k=slotKey(iso,sl);
+          if(rep.slots[k]){ delete rep.slots[k]; n++; }
+        });
+      });
+    });
+    closePop(); setDirty(true); render();
+    toast("Cleared "+n+" slot"+(n===1?"":"s")+" in "+Q().label+" for "+rep.name+".", false, "Undo", undo);
+  };
+  p.appendChild(clr);
+
+  var del=el("button","danger","Remove from "+ui.branch);
+  del.onclick=function(){ confirmRemove(anchor,rep); };
+  p.appendChild(del);
+  popAt(anchor,p);
+}
+
+/* Emailing each rep their own link is the difference between "find yourself in
+   a list of fifteen" and "fill in your slots". */
+function repLink(rep){
+  return location.origin+location.pathname+"?rep="+encodeURIComponent(rep.id);
+}
+function showRepLink(anchor, rep){
+  var url=repLink(rep);
+  var p=el("div");
+  p.appendChild(el("div","ttl","Send this to "+rep.name+" — it opens straight to their own calendar."));
+  var row=el("div","linkrow");
+  var inp=el("input"); inp.type="text"; inp.readOnly=true; inp.value=url;
+  var copy=el("button","btn sm primary","Copy");
+  copy.onclick=function(){
+    inp.select();
+    var done=false;
+    try{ if(navigator.clipboard){ navigator.clipboard.writeText(url); done=true; } }catch(e){}
+    if(!done){ try{ done=document.execCommand("copy"); }catch(e){} }
+    closePop();
+    toast(done ? "Link copied." : "Select the link and copy it.", !done);
+  };
+  row.appendChild(inp); row.appendChild(copy);
+  p.appendChild(row);
+  popAt(anchor,p);
+  inp.focus(); inp.select();
+}
+
+function openRename(anchor, rep){
+  var p=el("div");
+  p.appendChild(el("div","ttl","Rename rep"));
+  var inp=el("input"); inp.type="text"; inp.value=rep.name;
+  p.appendChild(inp);
+  var btns=el("div","rowbtns");
+  var ok=el("button","btn sm primary","Save"); ok.style.flex="1";
+  var no=el("button","btn sm","Cancel");
+  function commit(){
+    var v=inp.value.trim();
+    if(!v){ inp.focus(); return; }
+    rep.name=v; closePop(); setDirty(true); render();
+  }
+  ok.onclick=commit;
+  no.onclick=closePop;
+  inp.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); commit(); } if(e.key==="Escape") closePop(); };
+  btns.appendChild(ok); btns.appendChild(no);
+  p.appendChild(btns);
+  popAt(anchor,p);
+  inp.focus(); inp.select();
+}
+
+function confirmRemove(anchor, rep){
+  var any=state.quarters.some(function(q){
+    return q.months.some(function(m){ return monthCounts(rep,m).total>0; });
+  });
+  var p=el("div");
+  p.appendChild(el("div","ttl","Remove "+rep.name+" from "+ui.branch+"?"));
+  if(any) p.appendChild(el("div","ttl","Every quarter they have filled in will be deleted."));
+  var btns=el("div","rowbtns");
+  var yes=el("button","btn sm danger","Remove"); yes.style.flex="1";
+  var no=el("button","btn sm","Cancel");
+  yes.onclick=function(){
+    pushUndo("Remove "+rep.name+" from "+ui.branch);
+    var b=currentBranch();
+    b.reps=b.reps.filter(function(x){ return x.id!==rep.id; });
+    if(ui.repId===rep.id) ui.repId=b.reps.length?b.reps[0].id:null;
+    closePop(); setDirty(true); render();
+    toast(rep.name+" removed from "+ui.branch+".", false, "Undo", undo);
+  };
+  no.onclick=closePop;
+  btns.appendChild(yes); btns.appendChild(no);
+  p.appendChild(btns);
+  popAt(anchor,p);
+  yes.focus();
+}
+
+function openMoreMenu(anchor){
+  var p=el("div");
+
+  var cur=loadTheme();
+  p.appendChild(el("div","ttl", cur==="system"
+    ? "Appearance — following this device ("+(systemIsDark()?"dark":"light")+")"
+    : "Appearance"));
+  var row=el("div","themerow");
+  THEMES.forEach(function(t){
+    var b=el("button",null,t[1]);
+    b.setAttribute("aria-pressed", t[0]===cur ? "true":"false");
+    b.title = t[0]==="system" ? "Follow whatever this device is set to" : t[1]+" on this device";
+    b.onclick=function(){
+      setTheme(t[0]);
+      closePop();
+      openMoreMenu(anchor);          /* reopen so the choice reads back immediately */
+    };
+    row.appendChild(b);
+  });
+  p.appendChild(row);
+  p.appendChild(el("div","sep"));
+
+  var exp=el("button",null,"Export backup (.json)");
+  exp.onclick=function(){ closePop(); exportJSON(); };
+  p.appendChild(exp);
+  var imp=el("button",null,"Import backup…");
+  imp.onclick=function(){ closePop(); importJSON(); };
+  p.appendChild(imp);
+  p.appendChild(el("div","sep"));
+  var csv=el("button",null,"Export "+ui.branch+" coverage (.csv)");
+  csv.onclick=function(){ closePop(); exportCSV(); };
+  p.appendChild(csv);
+  if(MODE==="netlify"){
+    p.appendChild(el("div","sep"));
+    var reload=el("button",null,"Reload latest from server");
+    reload.onclick=function(){ closePop(); loadLatest(); };
+    p.appendChild(reload);
+    if(requiresPasscode){
+      var pc=el("button",null,passcode?"Change edit passcode…":"Enter edit passcode…");
+      pc.onclick=function(){ askPasscode(anchor); };
+      p.appendChild(pc);
+      if(passcode){
+        var fg=el("button",null,"Forget passcode on this device");
+        fg.onclick=function(){ closePop(); forgetPasscode(); paintSaveState(); render(); };
+        p.appendChild(fg);
+      }
+    }
+    if(requiresViewCode && viewCode){
+      var fv=el("button",null,"Sign out of this device");
+      fv.title="Forget the access code here — this device will ask for it again.";
+      fv.onclick=function(){
+        closePop();
+        forgetViewCode();
+        location.reload();
+      };
+      p.appendChild(fv);
+    }
+  }
+  popAt(anchor,p);
+}
+
+/* ===================== import / export ===================== */
+async function offerDownload(name, text){
+  var dl=null;
+  try{ dl=await window.claude.use("downloads"); }catch(e){}
+  if(!dl){ toast("Downloads aren't available in this view.",true); return; }
+  try{
+    await dl.save({filename:name, data:text});
+    toast("Saved "+name+".");
+  }catch(e){
+    var c=e&&e.code;
+    if(c==="declined") return;
+    if(c==="extension_not_enabled") toast("This view can't save that file type. Try the .json backup instead.",true);
+    else if(c==="too_large") toast("That file is too large to download here.",true);
+    else if(c==="rate_limited") toast("A download prompt is already open — finish that one first.",true);
+    else toast("Couldn't start the download: "+((e&&e.message)||"unknown error"),true);
+  }
+}
+function exportJSON(){
+  offerDownload("ri-capacity-"+Q().id+".json", JSON.stringify(state,null,2));
+}
+function exportCSV(){
+  var b=currentBranch(), rows=[["Branch","Rep","Month","Week","Date","Day","Slot","Prime"]];
+  b.reps.forEach(function(r){
+    Q().months.forEach(function(m){
+      weeksOf(m).forEach(function(days,wi){
+        days.forEach(function(iso){
+          if(isOffDay(r,iso)) return;
+          SLOTS.forEach(function(s){
+            if(blockAt(b.code,iso,s)) return;
+            if(r.slots[slotKey(iso,s)]){
+              rows.push([b.code,r.name,m.label,"Week "+(wi+1),iso,DOW[parseDate(iso).getDay()],s,isPrime(iso,s)?"Prime":""]);
+            }
+          });
+        });
+      });
+    });
+  });
+  var csv=rows.map(function(r){ return r.map(function(c){ return /[",\n]/.test(c)?'"'+String(c).replace(/"/g,'""')+'"':c; }).join(","); }).join("\n");
+  offerDownload("ri-capacity-"+b.code+"-"+Q().id+".csv", csv);
+}
+function importJSON(){
+  var inp=document.createElement("input");
+  inp.type="file"; inp.accept="application/json,.json";
+  inp.onchange=function(){
+    var f=inp.files&&inp.files[0]; if(!f) return;
+    var fr=new FileReader();
+    fr.onload=function(){
+      try{
+        var s=normalize(JSON.parse(fr.result));
+        if(!s.branches||!(s.quarter||s.quarters)) throw new Error("bad shape");
+        pushUndo("Import backup");
+        state=adopt(s,true); ui.repId=null; ui.covSel=null; weekCache={};
+        setDirty(true); render(); toast("Backup loaded. Press Save to share it.");
+      }catch(e){ toast("That file isn't a capacity calendar backup.",true); }
+    };
+    fr.readAsText(f);
+  };
+  inp.click();
+}
+
+/* ===================== views ===================== */
+function render(){
+  syncQuarterUI();
+  document.body.classList.toggle("focus-rep", !!focusRepId);
+  renderQuarterPicker();
+  renderDivSeg();
+  renderBranchSeg();
+  renderTabs();
+  renderRoster();
+  paintSaveState();
+  var v=$("#view"); v.textContent="";
+  if(focusMiss){
+    var fm=el("div","banner bad");
+    fm.appendChild(el("span",null,"No rep called “"+focusMiss+"” is on any roster, so this is the full calendar. Check the link, or pick a name on the left."));
+    v.appendChild(fm);
+  }
+  if(readOnly){
+    var bn=el("div","banner");
+    bn.appendChild(el("span",null,"View-only access. You can explore every view, but changes can't be saved."));
+    v.appendChild(bn);
+  }else if(!canSave){
+    var bn2=el("div","banner");
+    bn2.appendChild(el("span",null,"Saving isn't available in this view, so edits stay in this browser only. Export a backup from the ⋯ menu to keep them."));
+    v.appendChild(bn2);
+  }else if(MODE==="local"){
+    var bn3=el("div","banner");
+    bn3.appendChild(el("span",null,"This copy saves to this browser only — nobody else sees your changes. Deploy the site, or use the ⋯ menu to export a backup."));
+    v.appendChild(bn3);
+  }
+  if(conflictState){
+    var cb=el("div","banner bad");
+    cb.appendChild(el("span",null,"Someone else saved while you were editing. Their version is rev "+(conflictState.rev||"?")+"; yours is rev "+(state.rev||"?")+"."));
+    cb.appendChild(el("span","spacer"));
+    var theirs=el("button","btn sm","Load their version");
+    theirs.onclick=function(){
+      state=adopt(conflictState,true); conflictState=null; weekCache={};
+      setDirty(false); render();
+      toast("Loaded their version. Your edits are still backed up in this browser — restore them from the ⋯ menu if you need them.");
+    };
+    var mine=el("button","btn sm primary","Keep mine and overwrite");
+    mine.onclick=function(){ conflictState=null; save(true); };
+    cb.appendChild(theirs); cb.appendChild(mine);
+    v.appendChild(cb);
+  }else if(newerRev){
+    var nb=el("div","banner");
+    nb.appendChild(el("span",null,"A newer version was saved elsewhere."));
+    nb.appendChild(el("span","spacer"));
+    var ld=el("button","btn sm primary","Load it");
+    ld.onclick=loadLatest;
+    var ig=el("button","btn sm","Ignore");
+    ig.onclick=function(){ newerRev=0; render(); };
+    nb.appendChild(ld); nb.appendChild(ig);
+    v.appendChild(nb);
+  }
+  if(pendingBackup){
+    var rb=el("div","banner");
+    rb.appendChild(el("span",null,"This browser has newer unsaved changes from an earlier session."));
+    rb.appendChild(el("span","spacer"));
+    var use=el("button","btn sm primary","Restore them");
+    use.onclick=function(){ state=adopt(pendingBackup,true); pendingBackup=null; weekCache={}; setDirty(true); render(); };
+    var drop=el("button","btn sm","Discard");
+    drop.onclick=function(){ pendingBackup=null; try{ localStorage.removeItem(BACKUP_KEY); }catch(e){} render(); };
+    rb.appendChild(use); rb.appendChild(drop);
+    v.appendChild(rb);
+  }
+  if(ui.view==="calendar") viewCalendar(v);
+  else if(ui.view==="coverage") viewCoverage(v);
+  else if(ui.view==="compliance") viewCompliance(v);
+  else if(ui.view==="blocks") viewBlocks(v);
+  else viewTimeOff(v);
+}
+
+function meter(value, target, tone){
+  var wrap=el("div","meter");
+  var pct=Math.max(0,Math.min(100, target? (value/target)*100 : 0));
+  var bar=el("i", tone || (value===0?"":value>=target?"ok":"warn"));
+  bar.style.width=pct+"%";
+  wrap.appendChild(bar);
+  return wrap;
+}
+
+/* ---------- calendar ---------- */
+function viewCalendar(root){
+  var rep=currentRep(), b=currentBranch();
+  if(!rep){
+    var e=el("div","empty");
+    e.appendChild(el("h3",null, b.reps.length ? "Pick a rep" : "No reps in "+b.code+" yet"));
+    e.appendChild(el("p",null, b.reps.length
+      ? "Choose someone from the roster on the left to open their "+Q().label+" availability."
+      : "Add a rep in the left panel and their July, August and September calendars appear here, ready to fill in."));
+    root.appendChild(e);
+    return;
+  }
+  var month=monthByKey(ui.month);
+
+  var head=el("div","pagehead");
+  var l=el("div");
+  l.appendChild(el("div","eyebrow", divisionLabel(ui.division)+" · "+branchTitle(b.code)+" · "+Q().label));
+  l.appendChild(el("h2",null,rep.name));
+  l.appendChild(el("div","sub", focusRepId
+    ? "Tap the slots you can take an appointment in — drag across a row to fill several. Your changes save themselves."
+    : "Tap the slots this rep can take an appointment in — drag across a row to fill several."));
+  head.appendChild(l);
+  var months=el("div","months");
+  Q().months.forEach(function(m){
+    var btn=el("button",null,m.short);
+    var g=grade(rep,m);
+    var dot=el("i","mdot"+(g==="met"||g==="appr"?" ok":g==="short"?" warn":""));
+    btn.appendChild(dot);
+    btn.title=m.label+" — "+GRADE_LABEL[g];
+    btn.setAttribute("aria-pressed", m.key===month.key?"true":"false");
+    btn.onclick=function(){ ui.month=m.key; stashUI(); render(); };
+    months.appendChild(btn);
+  });
+  head.appendChild(months);
+  root.appendChild(head);
+
+  /* The key used to sit under five week bands, where nobody found it. */
+  var key=panel("key","Colour key","teal = available, amber = prime time");
+  key.body.appendChild(legendItem("std","Available"));
+  key.body.appendChild(legendItem("prime","Available · prime time"));
+  key.body.appendChild(legendItem("primeempty","Prime slot, still open"));
+  key.body.appendChild(legendItem("off","Day off, every week"));
+  key.body.appendChild(legendItem("once","One day off — click any date to set it"));
+  key.body.appendChild(legendItem("blk","Blocked — a company meeting or event, set in Blocked Times"));
+  key.body.appendChild(el("span","lg","Prime time is any weekend slot, or a weekday PM. You need "+state.targets.weekPrime+" a week."));
+  root.appendChild(key);
+
+  root.appendChild(dayOffStrip(rep));
+
+  /* month summary */
+  var c=monthCounts(rep,month), T=state.targets;
+  var sum=el("div","msum");
+  sum.appendChild(statBlock("Total slots · "+month.short, c.total, T.monthTotal, "std"));
+  sum.appendChild(statBlock("Prime slots · "+month.short, c.prime, T.monthPrime, "prime"));
+  var st=el("div"); st.style.minWidth="168px";
+  st.appendChild(el("div","eyebrow",month.short+" status"));
+  if(focusRepId) st.title="Submitting tells your sales manager this month is ready to review.";
+  var flow=rep.status[month.key]||"draft";
+  var stRow=el("div"); stRow.style.cssText="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;";
+  if(flow==="approved"){
+    stRow.appendChild(el("span","status appr","Approved by your manager"));
+  }else if(flow==="submitted"){
+    stRow.appendChild(el("span","status met","Submitted for approval"));
+    if(!readOnly){
+      var back=el("button","btn sm","Reopen");
+      back.title="Go back to editing "+month.label;
+      back.onclick=function(){ rep.status[month.key]="draft"; setDirty(true); render(); };
+      stRow.appendChild(back);
+    }
+  }else{
+    var met=c.total>=T.monthTotal && c.prime>=T.monthPrime;
+    var send=el("button","btn sm"+(met?" primary":""), "Submit "+month.short);
+    send.disabled=readOnly;
+    send.title = met
+      ? "Send "+month.label+" to your sales manager for approval"
+      : "You can still submit, but "+month.label+" is under the required "+T.monthTotal+" slots / "+T.monthPrime+" prime";
+    send.onclick=function(){ rep.status[month.key]="submitted"; setDirty(true); render(); toast(month.label+" submitted for approval."); };
+    stRow.appendChild(send);
+    if(!met){
+      var bits=[];
+      if(T.monthTotal-c.total>0) bits.push((T.monthTotal-c.total)+" more slots");
+      if(T.monthPrime-c.prime>0) bits.push((T.monthPrime-c.prime)+" more prime");
+      stRow.appendChild(el("span","status short","Needs "+bits.join(" and ")));
+    }
+  }
+  st.appendChild(stRow);
+  sum.appendChild(st);
+  root.appendChild(sum);
+
+  /* weeks */
+  var weeks=weeksOf(month);
+  weeks.forEach(function(days, wi){
+    root.appendChild(weekBand(rep, month, days, wi, weeks));
+  });
+
+  /* time off */
+  var to=el("div","tocard");
+  var lab=el("label"); lab.setAttribute("for","toBox");
+  lab.appendChild(el("span","eyebrow","Time off requests · "+month.label));
+  to.appendChild(lab);
+  var ta=el("textarea"); ta.id="toBox";
+  ta.placeholder="e.g. Out July 14–18 (family trip). Half day July 25.";
+  ta.value=rep.timeOff[month.key]||"";
+  ta.disabled=readOnly;
+  ta.oninput=function(){ rep.timeOff[month.key]=ta.value; if(!dirty) setDirty(true); else backup(); };
+  to.appendChild(ta);
+  root.appendChild(to);
+}
+
+/* Both of these are set-once, read-rarely; on a phone they cost more screen
+   than they are worth left open, so they collapse and remember the choice. */
+function panel(id, title, note){
+  var d=el("details","panel");
+  d.dataset.panel=id;
+  d.open = !!(ui.panels && ui.panels[id]);
+  var sum=el("summary");
+  sum.appendChild(el("span",null,title));
+  if(note) sum.appendChild(el("span","sumnote",note));
+  d.appendChild(sum);
+  d.addEventListener("toggle",function(){
+    if(!ui.panels) ui.panels={};
+    ui.panels[id]=d.open; stashUI();
+  });
+  var body=el("div","body");
+  d.appendChild(body);
+  d.body=body;
+  return d;
+}
+
+function dayOffStrip(rep){
+  var names=offDayNames(rep);
+  var singles=dateOffList(rep, Q());
+  var note=[];
+  if(names.length) note.push(names.join(", "));
+  if(singles.length) note.push(singles.length+" single day"+(singles.length===1?"":"s")+" in "+Q().label);
+  var wrap=panel("dayoff","Days off", note.length ? note.join(" · ") : "None set");
+  var row=el("div","dayoff-row");
+  DAYOFF_ORDER.forEach(function(dw){
+    var on=!!(rep.daysOff && rep.daysOff[dw]);
+    var b=el("button","dchip"+(on?" on":""), DOW[dw]);
+    b.setAttribute("aria-pressed", on?"true":"false");
+    b.setAttribute("aria-label", DOW_FULL[dw]+(on?" — scheduled day off":" — available"));
+    b.title = on
+      ? "Every "+DOW_FULL[dw]+" is blocked. Click to make it available again."
+      : "Block every "+DOW_FULL[dw]+" as a scheduled day off.";
+    if(readOnly) b.disabled=true;
+    else b.onclick=function(){
+      pushUndo((on?"Unblock ":"Block ")+DOW_FULL[dw]+"s");
+      if(!rep.daysOff) rep.daysOff={};
+      if(on) delete rep.daysOff[dw]; else rep.daysOff[dw]=1;
+      setDirty(true); render();
+    };
+    row.appendChild(b);
+  });
+  wrap.body.appendChild(row);
+  var n=offDayCount(rep);
+  wrap.body.appendChild(el("span","dayoff-note", n
+    ? n+" day"+(n===1?"":"s")+" a week blocked, every quarter"
+    : "Block a whole weekday above, or click any date in the calendar for a single day off"));
+
+  if(singles.length){
+    var line=el("div"); line.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-basis:100%;";
+    line.appendChild(el("span","eyebrow","Single days off · "+Q().label));
+    var chips=el("div","chips"); chips.style.marginTop="0";
+    singles.forEach(function(iso){
+      var d=parseDate(iso);
+      var c=el("button","chip", DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()+(readOnly?"":" ×"));
+      if(!readOnly){
+        c.title="Put this day back";
+        c.onclick=function(){
+          pushUndo("Restore "+shortDate(d));
+          delete rep.dateOff[iso]; setDirty(true); render();
+        };
+      }
+      chips.appendChild(c);
+    });
+    line.appendChild(chips);
+    if(!readOnly){
+      var clr=el("button","btn sm ghost","Clear all");
+      clr.onclick=function(){
+        pushUndo("Clear single days off in "+Q().label);
+        singles.forEach(function(iso){ delete rep.dateOff[iso]; });
+        setDirty(true); render();
+        toast("Cleared "+singles.length+" single day"+(singles.length===1?"":"s")+" off.", false, "Undo", undo);
+      };
+      line.appendChild(clr);
+    }
+    wrap.body.appendChild(line);
+  }
+  return wrap;
+}
+
+function statBlock(label, value, target, tone){
+  var w=el("div","grow");
+  w.appendChild(el("div","eyebrow",label));
+  var bs=el("div","bigstat");
+  bs.appendChild(el("span","v mono",String(value)));
+  bs.appendChild(el("span","of","/ "+target+" required"));
+  var g=el("span","status "+(value===0?"none":value>=target?"met":"short"), value===0?"Empty":value>=target?"Met":(target-value)+" short");
+  g.style.marginLeft="auto";
+  bs.appendChild(g);
+  bs.style.cssText="display:flex;align-items:baseline;gap:8px;";
+  w.appendChild(bs);
+  w.appendChild(meter(value,target,tone));
+  return w;
+}
+
+var painting=null; /* {value:true/false} */
+function weekBand(rep, month, days, wi, weeks){
+  var T=state.targets, bcode=branchCodeOf(rep);
+  var c=countRange(rep,days,bcode);
+  var band=el("div","week");
+
+  var head=el("div","week-head");
+  var ttl=el("div","week-title");
+  ttl.appendChild(el("span","n","Week "+(wi+1)));
+  ttl.appendChild(el("span","rng", shortDate(parseDate(days[0]))+" – "+shortDate(parseDate(days[6]))));
+  var shared=alsoIn(days);
+  if(shared.length){
+    var tag=el("span","wtag","Also in "+shared.join(" & "));
+    tag.title="These dates also appear in "+shared.join(" and ")+". It is the same availability either way — marking it here marks it there.";
+    ttl.appendChild(tag);
+  }
+  head.appendChild(ttl);
+
+  var ms=el("div","wmeters");
+  ms.appendChild(wMeter("Total", c.total, T.weekTotal, "std"));
+  ms.appendChild(wMeter("Prime", c.prime, T.weekPrime, "prime"));
+  var acts=el("div","wactions");
+  if(!readOnly){
+    var copy=el("button","btn sm ghost","Copy to all weeks");
+    copy.title="Use this week's pattern for every week in "+month.short;
+    copy.onclick=function(){
+      pushUndo("Copy week "+(wi+1)+" to all weeks");
+      weeks.forEach(function(other,oi){
+        if(oi===wi) return;
+        for(var d=0;d<7;d++) for(var s=0;s<SLOTS.length;s++){
+          var on=!!rep.slots[slotKey(days[d],SLOTS[s])];
+          var k=slotKey(other[d],SLOTS[s]);
+          if(on) rep.slots[k]=1; else delete rep.slots[k];
+        }
+      });
+      setDirty(true); render();
+      toast("Week "+(wi+1)+" copied over all 5 weeks of "+month.short+".", false, "Undo", undo);
+    };
+    acts.appendChild(copy);
+    var clr=el("button","btn sm ghost","Clear week");
+    clr.onclick=function(){
+      pushUndo("Clear week "+(wi+1));
+      days.forEach(function(iso){ SLOTS.forEach(function(s){ delete rep.slots[slotKey(iso,s)]; }); });
+      setDirty(true); render();
+      toast("Week "+(wi+1)+" cleared.", false, "Undo", undo);
+    };
+    acts.appendChild(clr);
+  }
+  ms.appendChild(acts);
+  head.appendChild(ms);
+  band.appendChild(head);
+
+  var scroll=el("div","grid"), inner=el("div","gridin");
+
+  var hdr=el("div","grow7");
+  hdr.appendChild(el("div","corner"));
+  days.forEach(function(iso){
+    var d=parseDate(iso), wknd=d.getDay()===0||d.getDay()===6;
+    var recur=isRecurringOff(rep,iso), once=isDateOff(rep,iso), off=recur||once;
+    var cell=el("button","dayhead"+(off?" off":wknd?" wknd":"")+(once&&!recur?" once":""));
+    cell.appendChild(el("div","dw",DOW[d.getDay()]));
+    cell.appendChild(el("div","dd",MON[d.getMonth()]+" "+d.getDate()));
+    var pretty=DOW_FULL[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate();
+    if(recur){
+      cell.title=DOW_FULL[d.getDay()]+"s are blocked for "+rep.name+" in Scheduled days off.";
+      cell.disabled=true;
+    }else if(readOnly){
+      cell.disabled=true;
+    }else{
+      cell.title = once ? "Day off — click to put "+pretty+" back" : "Click to mark "+pretty+" as a day off";
+      cell.setAttribute("aria-pressed", once?"true":"false");
+      cell.onclick=function(){
+        pushUndo((once?"Restore ":"Block ")+pretty);
+        if(!rep.dateOff) rep.dateOff={};
+        if(once) delete rep.dateOff[iso]; else rep.dateOff[iso]=1;
+        setDirty(true); render();
+        if(!once) toast(pretty+" marked as a day off.", false, "Undo", undo);
+      };
+    }
+    hdr.appendChild(cell);
+  });
+  inner.appendChild(hdr);
+
+  SLOTS.forEach(function(slot){
+    var row=el("div","grow7"+(slot==="PM"?" row-pm":""));
+    row.appendChild(el("div","slotlbl",slot));
+    days.forEach(function(iso){
+      var wrap=el("div","cellwrap");
+      if(isOffDay(rep,iso)){
+        var recurring=isRecurringOff(rep,iso);
+        wrap.classList.add("off");
+        if(!recurring) wrap.classList.add("once");
+        if(slot==="MID") wrap.appendChild(el("div","offlabel", recurring ? "Scheduled day off" : "Day off"));
+        wrap.appendChild(deadZone(rep, iso, slot, null));
+        row.appendChild(wrap);
+        return;
+      }
+      var bl=blockAt(bcode, iso, slot);
+      if(bl){
+        wrap.classList.add("blk");
+        wrap.appendChild(el("div","blklabel", blockLabel(bl)));
+        wrap.appendChild(deadZone(rep, iso, slot, bl));
+        row.appendChild(wrap);
+        return;
+      }
+      var prime=isPrime(iso,slot);
+      var on=!!rep.slots[slotKey(iso,slot)];
+      var btn=el("button","cell"+(prime?" prime":"")+(on?" on":""));
+      btn.appendChild(el("span","mk","✓"));
+      var d=parseDate(iso);
+      btn.dataset.iso=iso; btn.dataset.slot=slot;
+      btn.dataset.idx = String(wi*21 + SLOTS.indexOf(slot)*7 + days.indexOf(iso));
+      btn.setAttribute("aria-pressed", on?"true":"false");
+      btn.setAttribute("aria-label", DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()+" "+slot+(prime?" (prime time)":"")+(on?" — available":" — not available"));
+      if(readOnly){ btn.disabled=true; }
+      else{
+        btn.onclick=function(ev){ ev.preventDefault(); };
+        btn.onkeydown=function(ev){ cellKey(ev, rep, month, iso, slot, +btn.dataset.idx); };
+      }
+      wrap.appendChild(btn);
+      row.appendChild(wrap);
+    });
+    inner.appendChild(row);
+  });
+
+  wirePaint(inner, rep, month);
+  scroll.appendChild(inner);
+  band.appendChild(scroll);
+
+  return band;
+}
+/* A cell that ignores clicks reads as a broken checkbox — the commonest "it
+   won't tick" report. Cover every blocked cell with something that answers
+   "why not?" and, where the user can lift it, offers to. */
+function deadZone(rep, iso, slot, bl){
+  var d=parseDate(iso), pretty=DOW_FULL[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate();
+  var hit=el("button","deadzone");
+  hit.setAttribute("aria-label","Unavailable — "+pretty+" "+slot+". Why?");
+  if(bl){
+    hit.title=blockLabel(bl)+" — "+blockWhen(bl)+" ("+blockScopeLabel(bl)+"). Nobody can be booked then.";
+  }else if(isRecurringOff(rep,iso)){
+    hit.title=DOW_FULL[d.getDay()]+"s are a scheduled day off for "+rep.name+".";
+  }else{
+    hit.title=pretty+" is marked as a day off for "+rep.name+".";
+  }
+  hit.onclick=function(ev){
+    ev.preventDefault(); ev.stopPropagation();
+    explainBlocked(ev.currentTarget, rep, iso, slot, bl);
+  };
+  return hit;
+}
+function explainBlocked(anchor, rep, iso, slot, bl){
+  var d=parseDate(iso), pretty=DOW_FULL[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate();
+  var p=el("div");
+
+  if(bl){
+    p.appendChild(el("div","ttl","“"+blockLabel(bl)+"” blocks this time for "+blockScopeLabel(bl)+"."));
+    p.appendChild(el("div","ttl",blockWhen(bl)+". Nobody can be booked then, so the box can't be ticked."));
+    if(!readOnly){
+      var go=el("button",null,"Manage blocked times…");
+      go.onclick=function(){ closePop(); ui.view="blocks"; stashUI(); render(); };
+      p.appendChild(go);
+    }
+    popAt(anchor,p);
+    return;
+  }
+
+  var recurring=isRecurringOff(rep,iso);
+  p.appendChild(el("div","ttl", recurring
+    ? DOW_FULL[d.getDay()]+"s are a scheduled day off for "+rep.name+", so this box can't be ticked."
+    : pretty+" is marked as a day off for "+rep.name+", so this box can't be ticked."));
+  if(readOnly){ popAt(anchor,p); return; }
+
+  if(recurring){
+    var un=el("button",null,"Make "+DOW_FULL[d.getDay()]+"s available again");
+    un.onclick=function(){
+      pushUndo("Unblock "+DOW_FULL[d.getDay()]+"s");
+      delete rep.daysOff[d.getDay()];
+      closePop(); setDirty(true); render();
+      toast(DOW_FULL[d.getDay()]+"s are available again for "+rep.name+".", false, "Undo", undo);
+    };
+    p.appendChild(un);
+  }else{
+    var back=el("button",null,"Put "+shortDate(d)+" back");
+    back.onclick=function(){
+      pushUndo("Restore "+shortDate(d));
+      delete rep.dateOff[iso];
+      closePop(); setDirty(true); render();
+      toast(pretty+" is available again for "+rep.name+".", false, "Undo", undo);
+    };
+    p.appendChild(back);
+  }
+  popAt(anchor,p);
+}
+
+function legendItem(cls,label){
+  var w=el("span","lg");
+  w.appendChild(el("i","sw "+cls));
+  w.appendChild(el("span",null,label));
+  return w;
+}
+function wMeter(label, value, target, tone){
+  var w=el("div","wm");
+  w.appendChild(el("span","lbl",label));
+  var v=el("span","val "+(value===0?"zero":value>=target?"ok":"warn"), value+"/"+target);
+  w.appendChild(v);
+  var bar=meter(value,target,tone); bar.classList.add("bar");
+  w.appendChild(bar);
+  w.appendChild(el("span","need", value>=target ? "" : (target-value)+" to go"));
+  return w;
+}
+/* Pointer events cover mouse, pen and touch alike; the old mousedown/mouseenter
+   pair meant a phone or tablet could tap but never drag across a run of slots. */
+function wirePaint(container, rep, month){
+  if(readOnly) return;
+  container.addEventListener("pointerdown", function(ev){
+    var c=ev.target.closest && ev.target.closest(".cell");
+    if(!c || c.disabled) return;
+    ev.preventDefault();
+    var cur=!!rep.slots[slotKey(c.dataset.iso,c.dataset.slot)];
+    painting={value:!cur};
+    pushUndo(cur?"Remove slots":"Add slots");
+    applyCell(rep,c.dataset.iso,c.dataset.slot,painting.value);
+    refreshBand(rep,month);
+    try{ container.setPointerCapture(ev.pointerId); }catch(e){}
+  });
+  container.addEventListener("pointermove", function(ev){
+    if(!painting) return;
+    var t=document.elementFromPoint(ev.clientX,ev.clientY);
+    var c=t && t.closest && t.closest(".cell");
+    if(!c || !c.dataset.iso || c.disabled) return;
+    if(!!rep.slots[slotKey(c.dataset.iso,c.dataset.slot)]===painting.value) return;
+    applyCell(rep,c.dataset.iso,c.dataset.slot,painting.value);
+    refreshBand(rep,month);
+  });
+}
+
+function cellKey(ev, rep, month, iso, slot, idx){
+  if(ev.key===" "||ev.key==="Enter"){
+    ev.preventDefault();
+    pushUndo("Change a slot");
+    applyCell(rep,iso,slot,!rep.slots[slotKey(iso,slot)]);
+    refreshBand(rep,month);
+    return;
+  }
+  var step={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[ev.key];
+  if(!step) return;
+  ev.preventDefault();
+  /* step past any blocked day rather than dead-ending on it */
+  for(var i=1;i<=21;i++){
+    var t=document.querySelector('#view .cell[data-idx="'+(idx+step*i)+'"]');
+    if(t){ t.focus(); return; }
+  }
+}
+
+function applyCell(rep, iso, slot, on){
+  var k=slotKey(iso,slot);
+  if(on) rep.slots[k]=1; else delete rep.slots[k];
+  if(!dirty) setDirty(true); else backup();
+}
+/* light refresh: repaint cells + meters without a full re-render (keeps drag smooth) */
+var refreshQueued=false;
+function refreshBand(rep,month){
+  if(refreshQueued) return;
+  refreshQueued=true;
+  requestAnimationFrame(function(){
+    refreshQueued=false;
+    var v=$("#view"), code=branchCodeOf(rep);
+    var bands=v.querySelectorAll(".week");
+    var weeks=weeksOf(month), T=state.targets;
+    bands.forEach(function(band,wi){
+      var days=weeks[wi]; if(!days) return;
+      /* Read each cell's own date and slot. Walking by column index breaks the
+         moment a day off or a block removes a cell from the row: every cell
+         after the gap picks up its neighbour's value, and the one the user just
+         clicked appears not to respond at all. */
+      band.querySelectorAll(".gridin .cell").forEach(function(cell){
+        var on=!!rep.slots[slotKey(cell.dataset.iso, cell.dataset.slot)];
+        cell.classList.toggle("on",on);
+        cell.setAttribute("aria-pressed",on?"true":"false");
+      });
+      var c=countRange(rep,days,code);
+      var wms=band.querySelectorAll(".wm");
+      setWM(wms[0],c.total,T.weekTotal);
+      setWM(wms[1],c.prime,T.weekPrime);
+    });
+    var mc=monthCounts(rep,month,code);
+    var blocks=v.querySelectorAll(".msum .grow");
+    setStat(blocks[0],mc.total,T.monthTotal);
+    setStat(blocks[1],mc.prime,T.monthPrime);
+  });
+}
+function setWM(node,value,target){
+  if(!node) return;
+  var v=node.querySelector(".val");
+  v.textContent=value+"/"+target;
+  v.className="val "+(value===0?"zero":value>=target?"ok":"warn");
+  var need=node.querySelector(".need");
+  if(need) need.textContent = value>=target ? "" : (target-value)+" to go";
+  var bar=node.querySelector(".meter i");
+  if(bar) bar.style.width=Math.max(0,Math.min(100,(value/target)*100))+"%";
+}
+function setStat(node,value,target){
+  if(!node) return;
+  node.querySelector(".v").textContent=String(value);
+  var chip=node.querySelector(".status");
+  var cls=value===0?"none":value>=target?"met":"short";
+  chip.className="status "+cls;
+  chip.textContent=value===0?"Empty":value>=target?"Met":(target-value)+" short";
+  var bar=node.querySelector(".meter i");
+  if(bar) bar.style.width=Math.max(0,Math.min(100,(value/target)*100))+"%";
+}
+
+/* ---------- coverage ---------- */
+function viewCoverage(root){
+  var b=currentBranch(), month=monthByKey(ui.cov);
+  var head=el("div","pagehead");
+  var l=el("div");
+  l.appendChild(el("div","eyebrow",divisionLabel(ui.division)+" · "+branchTitle(b.code)+" · "+Q().label));
+  l.appendChild(el("h2",null,"Branch coverage"));
+  l.appendChild(el("div","sub","How many reps are available in each slot. Click a cell to see who."));
+  head.appendChild(l);
+  var months=el("div","months");
+  Q().months.forEach(function(m){
+    var btn=el("button",null,m.short);
+    btn.setAttribute("aria-pressed", m.key===month.key?"true":"false");
+    btn.onclick=function(){ ui.cov=m.key; ui.covSel=null; stashUI(); render(); };
+    months.appendChild(btn);
+  });
+  head.appendChild(months);
+  root.appendChild(head);
+
+  if(!b.reps.length){
+    var e=el("div","empty");
+    e.appendChild(el("h3",null,"Nothing to roll up yet"));
+    e.appendChild(el("p",null,"Add reps to "+b.code+" and their availability stacks up here as a coverage map."));
+    root.appendChild(e); return;
+  }
+
+  var weeks=weeksOf(month);
+  var counts={}, max=0, totalSlots=0, primeSlots=0, thin=[];
+  weeks.forEach(function(days){
+    days.forEach(function(iso){
+      SLOTS.forEach(function(s){
+        var n=0;
+        b.reps.forEach(function(r){ if(isAvailable(r,iso,s,b.code)) n++; });
+        counts[slotKey(iso,s)]=n;
+        if(n>max) max=n;
+        totalSlots+=n;
+        if(isPrime(iso,s)) primeSlots+=n;
+        if(isPrime(iso,s) && n===0) thin.push(iso+"|"+s);
+      });
+    });
+  });
+
+  var sum=el("div","msum");
+  var primeCount=0;
+  weeks.forEach(function(days){ days.forEach(function(iso){ SLOTS.forEach(function(s){ if(isPrime(iso,s)) primeCount++; }); }); });
+  sum.appendChild(kpi("Rep-slots covered", totalSlots, "in "+month.short));
+  sum.appendChild(kpi("Prime rep-slots", primeSlots, "in "+month.short));
+  sum.appendChild(kpi("Peak in one slot", max, max===1?"rep at once":"reps at once"));
+  sum.appendChild(kpi("Uncovered prime slots", thin.length, "of "+primeCount));
+  root.appendChild(sum);
+
+  var hm=el("div","hm"), scroll=el("div","hmscroll"), inner=el("div","hmin");
+  weeks.forEach(function(days,wi){
+    var wk=el("div","hmweek");
+    var lab=el("div","wlab","Week "+(wi+1)+" · "+shortDate(parseDate(days[0]))+" – "+shortDate(parseDate(days[6])));
+    wk.appendChild(lab);
+    wk.appendChild(el("div","rl",""));
+    days.forEach(function(iso){
+      var d=parseDate(iso), wknd=d.getDay()===0||d.getDay()===6;
+      wk.appendChild(el("div","dh"+(wknd?" wknd":""), DOW[d.getDay()]+" "+d.getDate()));
+    });
+    SLOTS.forEach(function(s){
+      wk.appendChild(el("div","rl",s));
+      days.forEach(function(iso){
+        var n=counts[slotKey(iso,s)], prime=isPrime(iso,s);
+        var c=el("button","hmcell"+(n===0?" z":""), n===0?"·":String(n));
+        if(n>0){
+          var t=max?n/max:0;
+          var base=prime?"var(--prime)":"var(--std)";
+          c.style.background="color-mix(in srgb, "+base+" "+Math.round(18+t*82)+"%, var(--surface))";
+          c.style.borderColor=prime?"var(--prime-edge)":"var(--std-edge)";
+          c.style.color = t>0.55 ? (prime?"var(--prime-ink)":"var(--std-ink)") : "var(--ink)";
+        }
+        var key=slotKey(iso,s);
+        c.setAttribute("aria-pressed", ui.covSel===key?"true":"false");
+        c.title=DOW[d0(iso)]+" "+shortDate(parseDate(iso))+" "+s+(prime?" · prime":"")+" — "+n+" rep"+(n===1?"":"s");
+        c.onclick=function(){ ui.covSel = ui.covSel===key?null:key; stashUI(); render(); };
+        wk.appendChild(c);
+      });
+    });
+    inner.appendChild(wk);
+  });
+  scroll.appendChild(inner);
+  hm.appendChild(scroll);
+
+  var sc=el("div","hmscale");
+  sc.appendChild(el("span","eyebrow","Reps available"));
+  var steps=el("span","steps");
+  [0,.25,.5,.75,1].forEach(function(t){
+    var i=el("i");
+    i.style.background = t===0 ? "var(--surface-2)" : "color-mix(in srgb, var(--std) "+Math.round(18+t*82)+"%, var(--surface))";
+    steps.appendChild(i);
+  });
+  sc.appendChild(steps);
+  sc.appendChild(el("span","lg","0 → "+max));
+  sc.appendChild(el("span","lg","Amber cells are prime time (weekend, or weekday PM)."));
+  hm.appendChild(sc);
+  root.appendChild(hm);
+
+  if(ui.covSel){
+    var parts=ui.covSel.split("|"), iso=parts[0], slot=parts[1];
+    var who=b.reps.filter(function(r){ return isAvailable(r,iso,slot,b.code); });
+    var det=el("div","detail");
+    det.appendChild(el("div","eyebrow","Available · "+DOW[d0(iso)]+" "+shortDate(parseDate(iso))+" · "+slot+(isPrime(iso,slot)?" · prime":"")));
+    det.appendChild(el("h3",null, who.length+" of "+b.reps.length+" reps"));
+    var chips=el("div","chips");
+    if(!who.length) chips.appendChild(el("span","chip","Nobody is available in this slot."));
+    who.forEach(function(r){
+      var ch=el("button","chip",r.name);
+      ch.onclick=function(){ ui.repId=r.id; ui.view="calendar"; ui.month=month.key; stashUI(); render(); };
+      chips.appendChild(ch);
+    });
+    det.appendChild(chips);
+    root.appendChild(det);
+  }
+}
+function d0(iso){ return parseDate(iso).getDay(); }
+function kpi(label, value, note){
+  var w=el("div","grow");
+  w.appendChild(el("div","eyebrow",label));
+  var bs=el("div","bigstat");
+  bs.appendChild(el("span","v mono",String(value)));
+  bs.appendChild(el("span","of",note));
+  w.appendChild(bs);
+  return w;
+}
+
+/* ---------- compliance ---------- */
+function viewCompliance(root){
+  var b=currentBranch(), T=state.targets;
+  var head=el("div","pagehead");
+  var l=el("div");
+  l.appendChild(el("div","eyebrow",divisionLabel(ui.division)+" · "+branchTitle(b.code)+" · "+Q().label));
+  l.appendChild(el("h2",null,"Compliance"));
+  l.appendChild(el("div","sub","Every rep needs "+T.monthTotal+" total and "+T.monthPrime+" prime slots a month."));
+  head.appendChild(l);
+  root.appendChild(head);
+
+  if(!b.reps.length){
+    var e=el("div","empty");
+    e.appendChild(el("h3",null,"No reps in "+b.code));
+    e.appendChild(el("p",null,"Add reps in the left panel to track submissions and approvals here."));
+    root.appendChild(e); return;
+  }
+
+  var done=0, short=0, none=0;
+  b.reps.forEach(function(r){
+    var allMet=true, anyData=false;
+    Q().months.forEach(function(m){
+      var g=grade(r,m);
+      if(g==="none") allMet=false; else anyData=true;
+      if(g==="short") allMet=false;
+    });
+    if(!anyData) none++; else if(allMet) done++; else short++;
+  });
+  var sum=el("div","msum");
+  sum.appendChild(kpi("Complete for "+Q().label, done, "of "+b.reps.length+" reps"));
+  sum.appendChild(kpi("Below target", short, "need adjustment"));
+  sum.appendChild(kpi("Not started", none, "no slots entered"));
+  root.appendChild(sum);
+
+  var wrap=el("div","tablewrap"), tbl=el("table");
+  var thead=el("thead"), hr=el("tr");
+  hr.appendChild(el("th",null,"Rep"));
+  Q().months.forEach(function(m){ hr.appendChild(el("th",null,m.short)); });
+  hr.appendChild(el("th",null,Q().label+" total"));
+  hr.appendChild(el("th",null,"Time off"));
+  thead.appendChild(hr); tbl.appendChild(thead);
+
+  var tb=el("tbody");
+  b.reps.forEach(function(r){
+    var tr=el("tr");
+    var nameTd=el("td","namecell");
+    var nameBtn=el("button",null,r.name);
+    nameBtn.style.cssText="font-weight:500;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px;";
+    nameBtn.onclick=function(){ ui.repId=r.id; ui.view="calendar"; stashUI(); render(); };
+    nameTd.appendChild(nameBtn);
+    tr.appendChild(nameTd);
+
+    var qt=0, qp=0;
+    Q().months.forEach(function(m){
+      var c=monthCounts(r,m); qt+=c.total; qp+=c.prime;
+      var td=el("td");
+      var box=el("div","dual");
+      box.appendChild(dualRow("Total",c.total,T.monthTotal,"std"));
+      box.appendChild(dualRow("Prime",c.prime,T.monthPrime,"prime"));
+      var row=el("div"); row.style.cssText="display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap;";
+      row.appendChild(statusPill(r,m,c));
+      box.appendChild(row);
+      td.appendChild(box);
+      tr.appendChild(td);
+    });
+
+    var qtd=el("td");
+    var qbox=el("div","dual");
+    qbox.appendChild(dualRow("Total",qt,T.monthTotal*3,"std"));
+    qbox.appendChild(dualRow("Prime",qp,T.monthPrime*3,"prime"));
+    qtd.appendChild(qbox);
+    tr.appendChild(qtd);
+
+    var offCount=Q().months.filter(function(m){ return (r.timeOff[m.key]||"").trim(); }).length;
+    var recurring=offDayCount(r);
+    var singles=dateOffList(r,Q()).length;
+    var otd=el("td");
+    var stack=el("div"); stack.style.cssText="display:flex;flex-direction:column;gap:4px;align-items:flex-start;";
+    if(singles) stack.appendChild(el("span","status short", singles+" day"+(singles===1?"":"s")+" off"));
+    if(recurring){
+      var rc=el("span","status none", recurring===1 ? offDayNames(r)[0]+"s off" : recurring+" days a week off");
+      rc.title=offDayNames(r).join(", ");
+      stack.appendChild(rc);
+    }
+    stack.appendChild(el("span","status "+(offCount?"short":"none"), offCount ? offCount+" request"+(offCount===1?"":"s") : (recurring?"No requests":"None")));
+    otd.appendChild(stack);
+    tr.appendChild(otd);
+
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  wrap.appendChild(tbl);
+  root.appendChild(wrap);
+}
+var FLOW=["draft","submitted","approved"];
+var FLOW_LABEL={draft:"Draft",submitted:"Submitted",approved:"Approved"};
+function statusPill(rep, month, counts){
+  var st=rep.status[month.key]||"draft";
+  var empty = counts.total===0;
+  var cls = st==="approved" ? "appr" : empty ? "none" : st==="submitted" ? "short" : "none";
+  var label = empty && st==="draft" ? "Not started" : FLOW_LABEL[st];
+  var b=el("button","status "+cls, label);
+  if(readOnly){ b.disabled=true; b.style.cursor="default"; return b; }
+  b.title="Click to advance: Draft → Submitted → Approved";
+  b.style.cursor="pointer";
+  b.onclick=function(){
+    var i=FLOW.indexOf(st);
+    rep.status[month.key]=FLOW[(i+1)%FLOW.length];
+    setDirty(true); render();
+  };
+  return b;
+}
+function dualRow(k,v,target,tone){
+  var r=el("div","dualrow");
+  r.appendChild(el("span","k",k));
+  r.appendChild(el("span","n "+(v===0?"zero":v>=target?"ok":"warn"), v+"/"+target));
+  var m=meter(v,target,tone); m.classList.add("bar");
+  r.appendChild(m);
+  return r;
+}
+
+/* ---------- blocked times ----------
+   Days off belong to a rep; these belong to the company. Nobody in scope can be
+   booked in a blocked slot, so it drops out of every total, the coverage map and
+   compliance — while whatever a rep had marked underneath stays put. */
+function viewBlocks(root){
+  var head=el("div","pagehead");
+  var l=el("div");
+  l.appendChild(el("div","eyebrow","Every company · "+Q().label));
+  l.appendChild(el("h2",null,"Blocked times"));
+  l.appendChild(el("div","sub","Times nobody can take an appointment — a standing meeting, or a one-off event. Reps see them greyed out on their own calendar."));
+  head.appendChild(l);
+  root.appendChild(head);
+
+  if(!readOnly) root.appendChild(blockForm());
+
+  var all=blockList();
+  if(!all.length){
+    var e=el("div","empty");
+    e.appendChild(el("h3",null,"Nothing is blocked"));
+    e.appendChild(el("p",null,"Every slot is open to whoever marks it. Add a block above to close one off for a branch, or for everybody."));
+    root.appendChild(e);
+    return;
+  }
+
+  var wrap=el("div","tablewrap"), tbl=el("table");
+  var thead=el("thead"), hr=el("tr");
+  ["What","When","Who","Costs each rep",""].forEach(function(h){ hr.appendChild(el("th",null,h)); });
+  thead.appendChild(hr); tbl.appendChild(thead);
+
+  var tb=el("tbody");
+  all.slice().sort(function(a,z){
+    if(!!a.date !== !!z.date) return a.date ? 1 : -1;
+    if(a.date) return a.date < z.date ? -1 : 1;
+    return a.dow - z.dow;
+  }).forEach(function(bl){
+    var tr=el("tr");
+    var td1=el("td","namecell");
+    td1.appendChild(el("span",null,blockLabel(bl)));
+    if(bl.date){ var c=el("span","chip","one-off"); c.style.marginLeft="8px"; td1.appendChild(c); }
+    tr.appendChild(td1);
+    tr.appendChild(el("td",null,blockWhen(bl)));
+    var td3=el("td");
+    td3.appendChild(el("span","status "+(bl.scope==="ALL"?"appr":"none"), blockScopeLabel(bl)));
+    tr.appendChild(td3);
+    tr.appendChild(el("td","num", costOf(bl)));
+
+    var td5=el("td");
+    if(!readOnly){
+      var rm=el("button","btn sm danger","Remove");
+      rm.onclick=function(){
+        pushUndo("Remove block: "+blockLabel(bl));
+        state.blocks=blockList().filter(function(x){ return x.id!==bl.id; });
+        setDirty(true); render();
+        toast("“"+blockLabel(bl)+"” unblocked. Anything reps had marked under it counts again.", false, "Undo", undo);
+      };
+      td5.appendChild(rm);
+    }
+    tr.appendChild(td5);
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  wrap.appendChild(tbl);
+  root.appendChild(wrap);
+
+  var note=el("div","sub");
+  note.style.cssText="margin-top:10px;max-width:74ch;";
+  note.textContent="A block takes those slots off what a rep can offer, so it lowers the ceiling on the "
+    +state.targets.monthTotal+"-slot monthly requirement. The figures above are per rep, across "+Q().label+".";
+  root.appendChild(note);
+}
+
+/* What one block actually costs a rep over the quarter — better to state it than
+   leave people wondering why their totals slipped. */
+function costOf(bl){
+  var n=0, prime=0, code=(bl.scope==="ALL") ? "ALL" : bl.scope;
+  Q().months.forEach(function(m){
+    monthDates(m).forEach(function(iso){
+      SLOTS.forEach(function(sl){
+        if(!blockMatches(bl, code, iso, sl)) return;
+        n++; if(isPrime(iso,sl)) prime++;
+      });
+    });
+  });
+  return n+" slot"+(n===1?"":"s")+(prime?" ("+prime+" prime)":"");
+}
+
+function blockForm(){
+  var card=el("div","tocard");
+  card.style.marginBottom="14px";
+  card.appendChild(el("div","eyebrow","Block a time"));
+
+  var row=el("div","blockform");
+
+  var kind=el("select");
+  [["dow","Every week"],["date","One date"]].forEach(function(o){
+    var op=el("option",null,o[1]); op.value=o[0]; kind.appendChild(op);
+  });
+
+  var dow=el("select");
+  DAYOFF_ORDER.forEach(function(d){
+    var op=el("option",null,DOW_FULL[d]); op.value=String(d);
+    if(d===3) op.selected=true;
+    dow.appendChild(op);
+  });
+
+  var date=el("input"); date.type="date"; date.hidden=true;
+  var span=quarterSpan(Q());
+  date.min=fmtISO(span.from); date.max=fmtISO(span.to); date.value=fmtISO(span.from);
+
+  kind.onchange=function(){
+    var one=kind.value==="date";
+    dow.hidden=one; date.hidden=!one;
+  };
+
+  var slot=el("select");
+  [["*","All slots"]].concat(SLOTS.map(function(s){ return [s,s]; })).forEach(function(o){
+    var op=el("option",null,o[1]); op.value=o[0];
+    if(o[0]==="AM") op.selected=true;
+    slot.appendChild(op);
+  });
+
+  var scope=el("select");
+  var opAll=el("option",null,"Everyone"); opAll.value="ALL"; scope.appendChild(opAll);
+  divisionList().forEach(function(d){
+    var og=el("optgroup"); og.label=d.label;
+    var whole=el("option",null,d.label+" — all branches"); whole.value=d.code;
+    if(d.code===ui.division) whole.selected=true;
+    og.appendChild(whole);
+    branchesIn(d.code).forEach(function(b){
+      var op=el("option",null,branchTitle(b.code)+" only"); op.value=b.code;
+      og.appendChild(op);
+    });
+    scope.appendChild(og);
+  });
+
+  var label=el("input"); label.type="text"; label.placeholder="What is it? e.g. Sales Meeting";
+
+  var add=el("button","btn sm primary","Block it");
+  function commit(){
+    var name=label.value.trim();
+    if(!name){ label.focus(); toast("Give the block a name, so reps know what it is.",true); return; }
+    var bl={ id:uid(), label:name, scope:scope.value, slot:slot.value };
+    if(kind.value==="date"){
+      if(!date.value){ date.focus(); return; }
+      bl.date=date.value;
+    }else bl.dow=+dow.value;
+
+    var clash=blockList().some(function(x){
+      return x.scope===bl.scope && x.slot===bl.slot && x.dow===bl.dow && x.date===bl.date;
+    });
+    if(clash){ toast("That time is already blocked.",true); return; }
+
+    pushUndo("Block "+name);
+    state.blocks=blockList().concat([bl]);
+    label.value="";
+    setDirty(true); render();
+    toast("“"+name+"” blocked — "+blockWhen(bl)+" for "+blockScopeLabel(bl)+".", false, "Undo", undo);
+  }
+  add.onclick=commit;
+  label.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); commit(); } };
+
+  [kind,dow,date,slot,scope,label,add].forEach(function(n){ row.appendChild(n); });
+  card.appendChild(row);
+  return card;
+}
+
+/* ---------- time off ---------- */
+function viewTimeOff(root){
+  var b=currentBranch();
+  var head=el("div","pagehead");
+  var l=el("div");
+  l.appendChild(el("div","eyebrow",divisionLabel(ui.division)+" · "+branchTitle(b.code)+" · "+Q().label));
+  l.appendChild(el("h2",null,"Time off requests"));
+  l.appendChild(el("div","sub","Recurring days off and dated requests, for every rep in the branch."));
+  head.appendChild(l);
+  root.appendChild(head);
+
+  var recurring=b.reps.filter(function(r){ return offDayCount(r)>0; });
+  if(recurring.length){
+    var card=el("div","tablewrap");
+    card.style.marginBottom="14px";
+    var t=el("table");
+    var th=el("thead"), thr=el("tr");
+    thr.appendChild(el("th",null,"Recurring weekly days off"));
+    thr.appendChild(el("th",null,"Days"));
+    thr.appendChild(el("th",null,"Slots left per week"));
+    th.appendChild(thr); t.appendChild(th);
+    var tbody=el("tbody");
+    recurring.forEach(function(r){
+      var tr=el("tr");
+      var td1=el("td","namecell");
+      var btn=el("button",null,r.name);
+      btn.style.cssText="font-weight:500;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px;";
+      btn.onclick=function(){ ui.repId=r.id; ui.view="calendar"; stashUI(); render(); };
+      td1.appendChild(btn); tr.appendChild(td1);
+      var td2=el("td");
+      var chips=el("div","chips"); chips.style.marginTop="0";
+      offDayNames(r).forEach(function(n){ chips.appendChild(el("span","chip",n)); });
+      td2.appendChild(chips); tr.appendChild(td2);
+      tr.appendChild(el("td","num", (7-offDayCount(r))*3+" of 21"));
+      tbody.appendChild(tr);
+    });
+    t.appendChild(tbody); card.appendChild(t);
+    root.appendChild(card);
+  }
+
+  var withDates=b.reps.filter(function(r){ return dateOffList(r,Q()).length>0; });
+  if(withDates.length){
+    var dcard=el("div","tablewrap");
+    dcard.style.marginBottom="14px";
+    var dt=el("table");
+    var dth=el("thead"), dtr=el("tr");
+    dtr.appendChild(el("th",null,"Single days off · "+Q().label));
+    dtr.appendChild(el("th",null,"Dates"));
+    dtr.appendChild(el("th",null,"Days"));
+    dth.appendChild(dtr); dt.appendChild(dth);
+    var dtb=el("tbody");
+    withDates.forEach(function(r){
+      var list=dateOffList(r,Q());
+      var tr=el("tr");
+      var td1=el("td","namecell");
+      var btn=el("button",null,r.name);
+      btn.style.cssText="font-weight:500;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px;";
+      btn.onclick=function(){ ui.repId=r.id; ui.view="calendar"; stashUI(); render(); };
+      td1.appendChild(btn); tr.appendChild(td1);
+      var td2=el("td");
+      var chips=el("div","chips"); chips.style.marginTop="0";
+      list.forEach(function(iso){
+        var d=parseDate(iso);
+        chips.appendChild(el("span","chip", DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate()));
+      });
+      td2.appendChild(chips); tr.appendChild(td2);
+      tr.appendChild(el("td","num", String(list.length)));
+      dtb.appendChild(tr);
+    });
+    dt.appendChild(dtb); dcard.appendChild(dt);
+    root.appendChild(dcard);
+  }
+
+  var rows=[];
+  b.reps.forEach(function(r){
+    Q().months.forEach(function(m){
+      var txt=(r.timeOff[m.key]||"").trim();
+      if(txt) rows.push({rep:r,month:m,text:txt});
+    });
+  });
+
+  if(!rows.length && !recurring.length && !withDates.length){
+    var e=el("div","empty");
+    e.appendChild(el("h3",null,"No time off requested"));
+    e.appendChild(el("p",null,"Days off blocked on a rep's calendar — a whole weekday, or a single date — and dated requests they type at the bottom of it, all show up here."));
+    root.appendChild(e);
+    return;
+  }
+  if(!rows.length) return;
+
+  Q().months.forEach(function(m){
+    var forMonth=rows.filter(function(x){ return x.month.key===m.key; });
+    if(!forMonth.length) return;
+    var card=el("div","tablewrap");
+    card.style.marginBottom="14px";
+    var tbl=el("table");
+    var thead=el("thead"), hr=el("tr");
+    hr.appendChild(el("th",null,m.label));
+    hr.appendChild(el("th",null,"Request"));
+    hr.appendChild(el("th",null,"Month slots"));
+    thead.appendChild(hr); tbl.appendChild(thead);
+    var tb=el("tbody");
+    forMonth.forEach(function(x){
+      var tr=el("tr");
+      var td1=el("td","namecell");
+      var btn=el("button",null,x.rep.name);
+      btn.style.cssText="font-weight:500;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px;";
+      btn.onclick=function(){ ui.repId=x.rep.id; ui.view="calendar"; ui.month=m.key; stashUI(); render(); };
+      td1.appendChild(btn);
+      tr.appendChild(td1);
+      var td2=el("td",null,x.text);
+      td2.style.maxWidth="60ch";
+      tr.appendChild(td2);
+      var c=monthCounts(x.rep,m);
+      var td3=el("td","num", c.total+" total · "+c.prime+" prime");
+      tr.appendChild(td3);
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    card.appendChild(tbl);
+    root.appendChild(card);
+  });
+}
+
+/* ===================== wiring ===================== */
+document.addEventListener("pointerup",function(){ painting=null; });
+document.addEventListener("pointercancel",function(){ painting=null; });
+window.addEventListener("blur",function(){ painting=null; });
+
+$("#saveBtn").onclick=function(){ save(); };
+$("#railBtn").onclick=function(){ setRail(!railOpen); };
+$("#scrim").onclick=function(){ setRail(false); };
+$("#qSel").onchange=function(){ setQuarter(this.value); };
+$("#qPrev").onclick=function(){ stepQuarter(-1); };
+$("#qNext").onclick=function(){ stepQuarter(1); };
+$("#moreBtn").onclick=function(ev){ openMoreMenu(ev.currentTarget); };
+$("#repFilter").oninput=function(){ ui.filter=this.value; renderRoster(); };
+$("#addRepBtn").onclick=addRep;
+$("#newRep").onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); addRep(); } };
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){ closePop(); setRail(false); }
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="z" && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){
+    e.preventDefault(); if(canUndo()) undo(); else toast("Nothing to undo.");
+  }
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="s"){ e.preventDefault(); if(dirty && !readOnly) save(); }
+});
+window.addEventListener("beforeunload",function(e){
+  if(dirty && !readOnly && canSave && !saving){ e.preventDefault(); e.returnValue=""; }
+});
+
+function addRep(){
+  if(readOnly){ toast("View-only access — the roster can't be changed.",true); return; }
+  var inp=$("#newRep"), name=inp.value.trim();
+  if(!name) { inp.focus(); return; }
+  var b=currentBranch();
+  if(b.reps.some(function(r){ return r.name.toLowerCase()===name.toLowerCase(); })){
+    toast(name+" is already on the "+b.code+" roster.",true); return;
+  }
+  var rep={id:uid(),name:name,slots:{},timeOff:{},status:{},daysOff:{},dateOff:{}};
+  b.reps.push(rep);
+  inp.value=""; ui.repId=rep.id; ui.view="calendar";
+  setDirty(true); render();
+  toast(name+" added to "+b.code+".");
+}
+
+/* ===================== boot ===================== */
+function pickState(seed, fetched, backupState){
+  var best=seed;
+  if(fetched && (fetched.rev||0) >= (best.rev||0)) best=fetched;
+  if(backupState && (backupState.rev||0) > (best.rev||0)) best=backupState;
+  return best;
+}
+
+async function detectBackend(){
+  /* Inside the claude.ai artifact viewer the page republishes itself. */
+  if(window.claude && window.claude.use){
+    try{ artifactApi = await window.claude.use("artifact"); }catch(e){ artifactApi=null; }
+    if(artifactApi){ MODE="artifact"; return; }
+  }
+  /* Served by the Netlify site. ?info=1 is the one thing answerable without a
+     code — it says which codes are needed and nothing else, so the page knows
+     whether to open its gate before asking for any data. */
+  try{
+    var r=await fetch(API+"?info=1",{cache:"no-store"});
+    if(r.ok){
+      var j=await r.json();
+      if(j && j.ok){
+        MODE="netlify";
+        requiresViewCode=!!j.requiresViewCode;
+        requiresPasscode=!!j.requiresPasscode;
+        passcode=loadPasscode();
+        viewCode=loadViewCode();
+        return;
+      }
+    }
+  }catch(e){}
+  MODE="local";
+}
+
+/* ---------- the gate ----------
+   The page ships with no roster and no availability in it; both arrive from the
+   function, which will not answer without the code. So this is the real barrier,
+   not a screen drawn over data that is already here. */
+function showGate(msg){
+  $("#app").hidden=true;
+  $("#gate").hidden=false;
+  var err=$("#gateErr");
+  if(msg){ err.textContent=msg; err.hidden=false; } else { err.hidden=true; }
+  var box=$("#gateCode");
+  box.disabled=false; $("#gateGo").disabled=false;
+  box.focus(); box.select();
+}
+function hideGate(){ $("#gate").hidden=true; $("#app").hidden=false; }
+
+/* Ask the server whether this code is any good — the only way to find out. */
+async function tryViewCode(code){
+  var r=await fetch(API,{cache:"no-store",headers:{"x-view-code":code}});
+  if(r.status===401) return null;
+  if(!r.ok) throw new Error("The server returned "+r.status+".");
+  var j=await r.json();
+  requiresPasscode=!!j.requiresPasscode;
+  return j.state || null;
+}
+
+$("#gateForm").onsubmit=async function(ev){
+  ev.preventDefault();
+  var box=$("#gateCode"), code=box.value.trim();
+  if(!code) return;
+  box.disabled=true; $("#gateGo").disabled=true; $("#gateErr").hidden=true;
+  var got=null;
+  try{
+    got=await tryViewCode(code);
+  }catch(e){
+    showGate("Couldn't reach the calendar — "+(e.message||"try again in a moment."));
+    return;
+  }
+  if(!got && got!==false){
+    showGate("That code wasn't recognised. Check it with whoever sent you the link.");
+    box.value="";
+    return;
+  }
+  rememberViewCode(code, $("#gateRemember").checked);
+  hideGate();
+  startApp(got);
+};
+
+async function boot(){
+  var seed=readSeed();
+  if(!seed){ document.body.innerHTML='<div style="padding:40px;font-family:sans-serif">This calendar\u2019s data could not be read.</div>'; return; }
+  ui=loadUI();
+
+  await detectBackend();
+
+  if(MODE==="netlify" && requiresViewCode){
+    /* a code remembered from last time saves the reader typing it again */
+    if(viewCode){
+      try{
+        var known=await tryViewCode(viewCode);
+        if(known){ hideGate(); startApp(known); return; }
+      }catch(e){}
+      forgetViewCode();
+    }
+    showGate(null);
+    return;
+  }
+
+  var remote=null;
+  try{
+    var raw=await Backend[MODE].load();
+    if(raw && raw.branches && (raw.quarter||raw.quarters)) remote=normalize(raw);
+  }catch(e){}
+
+  hideGate();
+  startApp(remote);
+}
+
+function startApp(remote){
+  var seed=readSeed();
+  state = pickState(seed, remote ? normalize(remote) : null, null);
+
+  /* A newer local copy means a save failed, or this browser was offline. */
+  var bk=null;
+  try{
+    var s2=localStorage.getItem(BACKUP_KEY);
+    if(s2){ var pj=JSON.parse(s2); if(pj&&pj.branches&&(pj.quarter||pj.quarters)) bk=normalize(pj); }
+  }catch(e){}
+  pendingBackup = bk && (bk.rev||0) > (state.rev||0) ? bk : null;
+
+  if(MODE==="artifact" && !artifactApi) canSave=false;
+
+  /* ?rep=<id or name> opens one rep's own calendar and nothing else */
+  var want=null;
+  try{ want=new URLSearchParams(location.search).get("rep"); }catch(e){}
+  if(want){
+    var hit=null;
+    state.branches.forEach(function(b){
+      b.reps.forEach(function(r){
+        if(!hit && (r.id===want || r.name.toLowerCase()===want.toLowerCase())) hit={b:b,r:r};
+      });
+    });
+    if(hit){ focusRepId=hit.r.id; ui.branch=hit.b.code; ui.repId=hit.r.id; ui.view="calendar"; }
+    else focusMiss=want;
+  }
+
+  if(!state.branches.length){
+    /* Opened straight from disk, or reached before the server answered: the page
+       carries no roster of its own, so say that rather than render an empty shell. */
+    document.body.innerHTML='<div style="padding:40px;font:14px system-ui;max-width:46ch;line-height:1.6">'
+      +'<strong>No calendar data.</strong><br>This page holds none of its own — the roster and '
+      +'availability come from the site it is served by. Open it from the deployed address rather '
+      +'than as a file.</div>';
+    return;
+  }
+
+  $("#repFilter").value=ui.filter||"";
+  applyTheme(loadTheme());
+  guardTheme();
+  render();
+  startPolling();
+
+}
+
+boot();
+})();
+</script>
+
+</body>
+</html>
