@@ -1,24 +1,36 @@
 /**
  * Shared state for the RI Capacity Calendar.
  *
- *   GET  /api/capacity-state?info=1  -> { ok, requiresViewCode, requiresPasscode }
- *   GET  /api/capacity-state         -> { ok, state, requiresPasscode }   needs x-view-code
- *   GET  /api/capacity-state?meta=1  -> { ok, rev, updatedAt }            needs x-view-code
- *   PUT  /api/capacity-state         -> { ok, rev }                       needs both codes
+ *   GET  /api/capacity-state?info=1  -> { ok, requiresCode }              no code
+ *   GET  /api/capacity-state         -> { ok, state, role }              needs x-access-code
+ *   GET  /api/capacity-state?meta=1  -> { ok, rev, updatedAt, role }     needs x-access-code
+ *   PUT  /api/capacity-state         -> { ok, rev }                      needs x-access-code
  *
  * The route is declared in code (Netlify Functions v2), so no redirect rule is
  * needed. The name is deliberately specific so it cannot collide with an
  * existing /api/state on a site this is dropped into.
  *
- * Two codes, both environment variables:
+ * ── Two roles, one code each ────────────────────────────────────────────────
  *
- *   VIEW_CODE      required to read anything at all. The calendar's data — who
- *                  is on which roster and when they are free — is only ever
- *                  sent to a request carrying it. Unset means open reading.
- *   EDIT_PASSCODE  required to write. Unset means anyone who can read can save.
+ *   ADMIN_CODE    everything.
+ *   MANAGER_CODE  everything a sales manager does — reading every view,
+ *                 approving a month, correcting a rep's availability — but not
+ *                 the shape of the thing: who is on which roster, what the
+ *                 branches and companies are, what is blocked, what the targets
+ *                 are. Those are admin's.
  *
- * `?info=1` is the one unauthenticated answer: it says which codes a client
- * will need, and nothing else, so the page knows whether to show its gate.
+ * One code gets you in and decides what you may write; there is no second
+ * prompt. Whichever code a request carries, the *server* decides what that
+ * request is allowed to change, by diffing the structure of what was sent
+ * against what is stored. Hiding buttons in the page is a courtesy to the
+ * reader, not a control — a manager who calls this endpoint by hand is refused
+ * exactly the same way.
+ *
+ * With neither variable set the calendar is wide open and everyone is admin,
+ * which is fine for local development and wrong for a deployment.
+ *
+ * `?info=1` is the one unauthenticated answer: it says whether a code is
+ * needed, and nothing else, so the page knows whether to show its gate.
  *
  * The initial roster lives in seed.mjs, bundled into this function rather than
  * sitting in the published HTML — anything in that file is public regardless of
@@ -61,6 +73,47 @@ function sameSecret(a, b) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * The shape of the calendar, as opposed to what people have entered into it.
+ *
+ * Everything in here is admin's: which companies and branches exist, who is on
+ * each roster and under what name, what is blocked for everyone, and the
+ * targets every rep is measured against. Everything left out — a rep's marked
+ * slots, their days off, their time-off notes, their monthly status — is a
+ * manager's to change.
+ *
+ * Rep ids are included because a personal link is an id: silently swapping one
+ * would repoint somebody's link at a different person.
+ */
+function structureOf(s) {
+  return JSON.stringify({
+    divisions: (s.divisions || []).map((d) => [d.code, d.label]),
+    branches: (s.branches || []).map((b) => [
+      b.code, b.division || "KQ", b.name || "",
+      (b.reps || []).map((r) => [r.id, r.name]),
+    ]),
+    blocks: (s.blocks || [])
+      .map((b) => [b.id, b.label, b.scope, b.slot, b.dow ?? null, b.date || null])
+      .sort((a, z) => String(a[0]).localeCompare(String(z[0]))),
+    /* sorted, so a browser that happens to rebuild the object in a different
+       key order is not mistaken for someone moving the goalposts */
+    targets: Object.keys(s.targets || {}).sort().map((k) => [k, s.targets[k]]),
+  });
+}
+
+/** What a manager tried to change that only an admin may. Empty means fine. */
+function structuralChanges(before, after) {
+  if (!before) return ["everything — there is nothing stored yet"];
+  const a = JSON.parse(structureOf(before));
+  const b = JSON.parse(structureOf(after));
+  const out = [];
+  if (JSON.stringify(a.divisions) !== JSON.stringify(b.divisions)) out.push("the companies");
+  if (JSON.stringify(a.branches) !== JSON.stringify(b.branches)) out.push("the branches or their rosters");
+  if (JSON.stringify(a.blocks) !== JSON.stringify(b.blocks)) out.push("the blocked times");
+  if (JSON.stringify(a.targets) !== JSON.stringify(b.targets)) out.push("the targets");
+  return out;
+}
+
 async function load(store) {
   try {
     return await store.get(KEY, { type: "json" });
@@ -97,21 +150,27 @@ async function currentState(store) {
 
 export default async (req) => {
   const store = getStore(STORE);
-  const viewCode = process.env.VIEW_CODE || "";
-  const editCode = process.env.EDIT_PASSCODE || "";
-  const requiresViewCode = viewCode.length > 0;
-  const requiresPasscode = editCode.length > 0;
+  const adminCode = process.env.ADMIN_CODE || "";
+  const managerCode = process.env.MANAGER_CODE || "";
+  const requiresCode = adminCode.length > 0 || managerCode.length > 0;
 
   const url = new URL(req.url);
 
-  /* The only thing anyone can ask without a code: which codes are needed. */
+  /* The only thing anyone can ask without a code: whether one is needed. */
   if (req.method === "GET" && url.searchParams.get("info")) {
-    return json({ ok: true, requiresViewCode, requiresPasscode });
+    return json({ ok: true, requiresCode });
   }
 
-  if (requiresViewCode && !sameSecret(req.headers.get("x-view-code") || "", viewCode)) {
+  /* One code, and it decides the role. Admin wins if both are set the same. */
+  const given = req.headers.get("x-access-code") || "";
+  let role = null;
+  if (!requiresCode) role = "admin";
+  else if (adminCode && sameSecret(given, adminCode)) role = "admin";
+  else if (managerCode && sameSecret(given, managerCode)) role = "manager";
+
+  if (!role) {
     await sleep(WRONG_CODE_DELAY_MS);
-    return json({ ok: false, error: "view_code" }, 401);
+    return json({ ok: false, error: "access_code" }, 401);
   }
 
   if (req.method === "GET") {
@@ -121,18 +180,13 @@ export default async (req) => {
         ok: true,
         rev: stored?.rev ?? 0,
         updatedAt: stored?.updatedAt ?? null,
-        requiresPasscode,
+        role,
       });
     }
-    return json({ ok: true, state: await currentState(store), requiresPasscode });
+    return json({ ok: true, state: await currentState(store), role });
   }
 
   if (req.method === "PUT" || req.method === "POST") {
-    if (requiresPasscode && !sameSecret(req.headers.get("x-edit-passcode") || "", editCode)) {
-      await sleep(WRONG_CODE_DELAY_MS);
-      return json({ ok: false, error: "passcode" }, 401);
-    }
-
     let body;
     try {
       body = await req.json();
@@ -149,6 +203,21 @@ export default async (req) => {
     }
 
     const current = await load(store);
+
+    /* The role check that actually holds: a manager may change what people
+       entered, never the shape of the calendar. Checked against what is stored,
+       so it does not matter what the browser thinks it is allowed to send. */
+    if (role !== "admin") {
+      const blocked = structuralChanges(current ? normalize(current) : null, next);
+      if (blocked.length) {
+        return json({
+          ok: false,
+          error: "admin_only",
+          changed: blocked,
+          message: "Changing " + blocked.join(" and ") + " needs the admin code.",
+        }, 403);
+      }
+    }
 
     if (!body.force && current && (next.rev ?? 0) <= (current.rev ?? 0)) {
       return json({ ok: false, error: "conflict", state: current }, 409);

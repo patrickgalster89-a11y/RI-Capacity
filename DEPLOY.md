@@ -65,22 +65,24 @@ Commit both `package.json` and `package-lock.json`.
 
 ## 4. Set the two codes
 
-Netlify → **Site configuration → Environment variables**, add both:
+Netlify → **Project configuration → Environment variables**, add both. Include the
+**Functions** scope — that is what reads them:
 
-| Key | Value | What it guards |
+| Key | Who it is for | What that role may change |
 | --- | --- | --- |
-| `VIEW_CODE` | what everyone types to get in at all | reading anything |
-| `EDIT_PASSCODE` | what they type before they can save | writing |
+| `ADMIN_CODE` | you | everything |
+| `MANAGER_CODE` | sales managers | availability, days off, time-off notes, monthly approvals |
 
 Then **Deploys → Trigger deploy → Clear cache and deploy site**.
 
-`VIEW_CODE` is the front door: until a request carries it the function answers 401 and the
-page shows nothing but a code prompt. `EDIT_PASSCODE` sits on top — everyone gets in with
-the first, only people with the second can change anything.
+One prompt, either code. Until a request carries one of them the function answers 401 and
+the page shows nothing but that prompt. A manager's code is refused — `403 admin_only` —
+for anything that changes the shape of the calendar: rosters, branches, companies, blocked
+times, targets, or an imported backup. That check runs in the function against what is
+stored, so it holds whether the request came from the app or from a terminal.
 
-> Leave `VIEW_CODE` unset and anyone who finds the URL can read the calendar. Leave
-> `EDIT_PASSCODE` unset and anyone who can read it can save. Set both before you share
-> the link.
+> Leave both unset and anyone who finds the URL can read *and* change everything. Set them
+> before you share the link.
 
 ## 5. Check it
 
@@ -98,7 +100,7 @@ the first, only people with the second can change anything.
 
 **Nothing on your site links to it, and the code is the real lock.** The calendar is
 unlisted until you add a link, but it no longer depends on that: the roster is not in the
-page, and the function will not hand it over without `VIEW_CODE`. Reps get their own link from the ⋯ menu beside each name, which opens
+page, and the function will not hand it over without one of the two codes. Reps get their own link from the ⋯ menu beside each name, which opens
 straight to their calendar and hides everything else:
 `yourdomain.com/capacity/?rep=r1`
 
@@ -127,10 +129,10 @@ loads blank.
 **"This copy saves to this browser only"** — the page cannot reach the function.
 Open `yourdomain.com/api/capacity-state` directly:
 
-- **401** with `{"ok":false,"error":"view_code"}` → the function is fine and doing its
-  job; that is what it should say to a request without the code. Try
+- **401** with `{"ok":false,"error":"access_code"}` → the function is fine and doing its
+  job; that is what it should say to a request without a code. Try
   `yourdomain.com/api/capacity-state?info=1`, which needs no code, and expect
-  `{"ok":true,"requiresViewCode":true,...}`.
+  `{"ok":true,"requiresCode":true}`.
 - JSON like `{"ok":true,...}` → the function is fine; the page is looking at the
   wrong path. Check the `<meta name="capacity-api">` tag.
 - **404** → the function did not deploy. Confirm the file is at
@@ -138,13 +140,16 @@ Open `yourdomain.com/api/capacity-state` directly:
 - **500** → almost always the missing dependency. Check the function log for
   `Cannot find module '@netlify/blobs'` and revisit step 3.
 
-**The access code is refused** — it does not match `VIEW_CODE`, or the variable was set
-after the last deploy. Environment variables only reach a function on a fresh deploy:
+**The access code is refused** — it matches neither `ADMIN_CODE` nor `MANAGER_CODE`, or a
+variable was set after the last deploy. Environment variables only reach a function on a fresh deploy:
 **Deploys → Trigger deploy → Clear cache and deploy site**.
 
-**Saving returns 401** — the passcode does not match `EDIT_PASSCODE`. Rotate it
-by changing the variable and redeploying; everyone is asked again on their next
-save.
+**Saving returns 403** — that account is on the manager code and the change is admin-only.
+The reply names what it refused. Sign out (⋯ → **Sign out of this device**) and back in
+with the admin code.
+
+**Saving returns 401** — the code stopped matching, usually because it was rotated. Sign
+out and back in.
 
 **The page 404s** — `capacity/` did not reach your publish directory. Step 1.
 

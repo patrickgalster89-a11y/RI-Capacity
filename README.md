@@ -20,11 +20,16 @@ coverage, who has hit their monthly requirement, and every time-off request in o
 Every rep gets their own link (`?rep=<id>`) that opens straight to their calendar and
 hides everything else. Grab one from the ⋯ menu beside their name in the roster.
 
-**The whole thing is behind an access code.** The page you land on is a code prompt and
-nothing else — no roster, no names, no availability. None of that is in the published
-HTML: it lives with the function, and the function only answers a request that carries
-the code. A second code is needed to save. Both are Netlify environment variables, so
-rotating one is a variable change and a redeploy, not an edit to the app.
+**The whole thing is behind an access code, and the code says who you are.** The page you
+land on is a code prompt and nothing else — no roster, no names, no availability. None of
+that is in the published HTML: it lives with the function, and the function only answers a
+request that carries a code.
+
+There are two codes and one prompt. `ADMIN_CODE` can change anything. `MANAGER_CODE` can
+do the sales-manager job — read every view, approve a month, correct somebody's
+availability — but not reshape the calendar: rosters, branches, companies, blocked times
+and targets are admin's. Both are Netlify environment variables, so rotating one is a
+variable change and a redeploy, not an edit to the app.
 
 ---
 
@@ -66,30 +71,44 @@ served to the public. The function is found separately through `functions =
 
 ### 3. Set the two codes
 
-Netlify → **Site configuration → Environment variables**, add both:
+Netlify → **Project configuration → Environment variables**, add both. Make sure the
+**Functions** scope is included — that is what reads them — and tick *contains secret
+values* if you are offered it:
 
-| Key | Value | What it guards |
+| Key | Who it is for | What that role may change |
 | --- | --- | --- |
-| `VIEW_CODE` | what everyone types to get in at all | reading anything — rosters, availability, the lot |
-| `EDIT_PASSCODE` | what they type before they can save | writing |
+| `ADMIN_CODE` | you | everything |
+| `MANAGER_CODE` | sales managers | availability, days off, time-off notes, monthly approvals |
 
-Then **Deploys → Trigger deploy → Clear cache and deploy site** so the function picks them up.
+Then **Deploys → Trigger deploy → Clear cache and deploy site** so the function picks them
+up. Environment variables only reach a function on a fresh deploy.
 
-`VIEW_CODE` is the front door. Until a request carries it the function answers 401 and
-the page shows its code prompt, so an unlisted URL is no longer the only thing standing
-between a stranger and fifty-one people's names. A device that ticks **Remember on this
-device** keeps the code in `localStorage` and skips the prompt next time; **⋯ → Sign out
-of this device** forgets it.
+Until a request carries one of the two, the function answers 401 and the page shows its
+prompt — so an unlisted URL is no longer the only thing between a stranger and fifty-one
+people's names. A device that ticks **Remember on this device** keeps the code in
+`localStorage` and skips the prompt next time; **⋯ → Sign out of this device** forgets it.
 
-`EDIT_PASSCODE` sits on top of that: everyone gets in with the view code, and only people
-with the passcode can change anything. Give reps both if they are filling in their own
-availability; give viewers only the first.
+To check both took, open `/api/capacity-state?info=1` — no code needed — and expect
+`{"ok":true,"requiresCode":true}`.
 
-To rotate either, change the variable and redeploy — everyone is asked again next time.
+> Leave both unset and the calendar is wide open and everyone is admin. That is fine on
+> your laptop and wrong on a deployed site. Set them before you share the link.
 
-> Leave `VIEW_CODE` unset and anybody with the URL can read the calendar. Leave
-> `EDIT_PASSCODE` unset and anybody who can read it can save. Set both before you share
-> the link.
+#### What "manager" actually means
+
+The boundary is enforced by the function, against what is stored — not by hiding buttons.
+A manager who opens the developer console, or curls the endpoint by hand, gets the same
+`403 admin_only` as a manager who clicks. The page hides the controls as a courtesy so
+nobody is left pressing a button that will not work.
+
+Admin-only, because it is the shape of the calendar rather than what people entered:
+
+- adding, renaming, removing or moving a rep — including changing a rep's id, which is
+  what their personal link points at
+- adding, editing or removing a blocked time
+- branches, companies and their names
+- the weekly and monthly targets
+- importing a backup, which replaces all of the above at once
 
 ### 4. Give it an address
 
@@ -105,10 +124,10 @@ is just `https://<your address>/?rep=<id>`.
 
 ## Using it
 
-**Getting in.** Everyone types the view code once. Ticking **Remember on this device**
-keeps it, so the prompt is a one-off per phone or laptop; ⋯ → **Sign out of this device**
-clears it. A personal link asks for the code too — it opens the prompt, then lands on that
-rep's calendar.
+**Getting in.** Everyone types their code once. Ticking **Remember on this device** keeps
+it, so the prompt is a one-off per phone or laptop; ⋯ → **Sign out of this device** clears
+it. A personal link asks for a code too — it opens the prompt, then lands on that rep's
+calendar. The ⋯ menu says which role you signed in as.
 
 **For a rep.** Send them their personal link. It opens on their own name with the roster,
 branch switcher and admin tabs hidden, so the only thing on screen is their calendar. They
@@ -138,9 +157,10 @@ choosing System hands it back to the phone or laptop's own setting, and the menu
 way that is currently going. It's a per-device preference kept in `localStorage`, not part
 of the shared data, so one person's choice isn't imposed on everybody.
 
-**Saving.** The first save asks for the passcode; after that the page autosaves about two
-and a half seconds after the last change. The Save button stays for saving on demand.
-Autosave is off in the fallback modes where a save would reload the page.
+**Saving.** There is no second prompt: the code you came in with is the code that saves.
+The page autosaves about two and a half seconds after the last change, and the Save button
+stays for saving on demand. Autosave is off in the fallback modes where a save would
+reload the page.
 
 ---
 
@@ -151,16 +171,17 @@ One shared JSON document, saved through a small serverless function backed by
 account beyond Netlify, and it stays inside the free tier at this size.
 
 ```
-GET  /api/capacity-state?info=1  → { ok, requiresViewCode, requiresPasscode }   no code
-GET  /api/capacity-state         → { ok, state, requiresPasscode }   needs x-view-code
-GET  /api/capacity-state?meta=1  → { ok, rev, updatedAt }            needs x-view-code
-PUT  /api/capacity-state         → { ok, rev }                       needs both codes
+GET  /api/capacity-state?info=1  → { ok, requiresCode }           no code
+GET  /api/capacity-state         → { ok, state, role }            needs x-access-code
+GET  /api/capacity-state?meta=1  → { ok, rev, updatedAt, role }   needs x-access-code
+PUT  /api/capacity-state         → { ok, rev }                    needs x-access-code
 ```
 
-`?info=1` is the one thing anyone can ask without a code, and it says only which codes
-they will need — that is how the page knows whether to show its prompt. Everything else
-is 401 without `x-view-code`, after a deliberate half-second pause so a wrong code cannot
-be guessed at speed.
+`?info=1` is the one thing anyone can ask without a code, and it says only whether a code
+is needed — that is how the page knows whether to show its prompt. Everything else is 401
+without `x-access-code`, after a deliberate half-second pause so a wrong code cannot be
+guessed at speed. A write that a manager's code does not cover comes back `403` with
+`error: "admin_only"` and a `changed` list naming what was refused.
 
 The route is declared inside the function, and the page reads it from a
 `<meta name="capacity-api">` tag — change both if you need it somewhere else. The
@@ -197,9 +218,9 @@ npm run dev          # netlify dev — serves capacity/ and the function togethe
 ```
 
 `netlify dev` comes from the Netlify CLI, which the `dev` script fetches with `npx` the
-first time. It reads a local `.env`, so put `VIEW_CODE=...` and `EDIT_PASSCODE=...` there
-to test both locks — `.env` is gitignored. Leave them out and the calendar is open, which
-is the quicker way to work on the grid itself.
+first time. It reads a local `.env`, so put `ADMIN_CODE=...` and `MANAGER_CODE=...` there
+to test both roles — `.env` is gitignored. Leave them out and the calendar is open and
+everyone is admin, which is the quicker way to work on the grid itself.
 
 Without the CLI you can still open `capacity/index.html` straight from disk, but there is
 no function behind it, so it opens empty and saves to that browser only — fine for
@@ -211,7 +232,7 @@ bundler, no dependencies in the browser. Open it, edit it, reload.
 ```
 capacity/index.html                   the app — one self-contained file, and the only
                                       file the public site serves
-netlify/functions/capacity-state.mjs  shared storage, and both access codes
+netlify/functions/capacity-state.mjs  shared storage, the two codes, and the role check
 netlify/functions/seed.mjs            what a brand-new site starts with: the rosters
 netlify/functions/roster.mjs          roster migrations, run server-side
 netlify.toml                          publishes capacity/ as its own site

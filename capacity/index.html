@@ -1069,12 +1069,11 @@ var state, ui, dirty=false, readOnly=false, canSave=true, saving=false, saveMode
    "artifact" — running inside the claude.ai artifact viewer
    "netlify"  — served by the Netlify site, talking to /api/state
    "local"    — neither; this browser only                              */
-var MODE="local", passcode=null, requiresPasscode=false, bootState=null;
+var MODE="local", bootState=null;
 var API=(document.querySelector('meta[name="capacity-api"]')||{}).content || "/api/capacity-state";
 var conflictState=null, newerRev=0, pollTimer=null;
-var PASS_KEY="ri-capacity-calendar/passcode";
-var VIEW_KEY="ri-capacity-calendar/viewcode";
-var viewCode=null, requiresViewCode=false;
+var CODE_KEY="ri-capacity-calendar/accesscode";
+var accessCode=null, requiresCode=false, role=null;
 var undoStack=[], UNDO_MAX=12, autosaveTimer=null;
 var focusRepId=null, focusMiss=null, railOpen=false;
 
@@ -1181,7 +1180,7 @@ function setDirty(v){
 /* Once we are allowed to write, saving stops being the user's job. */
 function autosaveReady(){
   if(readOnly||!canSave||conflictState) return false;
-  if(MODE==="netlify")  return !requiresPasscode || !!passcode;
+  if(MODE==="netlify")  return !!role;
   if(MODE==="artifact") return saveMode==="files";
   return false;
 }
@@ -1196,7 +1195,7 @@ function paintSaveState(){
   var box=$("#saveState"), txt=$("#saveText"), cls="", msg="";
   if(readOnly){ cls="ro"; msg="View only — changes aren't saved"; }
   else if(!canSave){ cls="ro"; msg="Saving unavailable in this view"; }
-  else if(MODE==="netlify" && requiresPasscode && !passcode && !dirty){ cls="ro"; msg="Locked — passcode needed to save"; }
+  else if(MODE==="netlify" && !role && !dirty){ cls="ro"; msg="Locked — enter the access code"; }
   else if(saving){ cls="busy"; msg="Saving…"; }
   else if(dirty){ cls="dirty"; msg=autosaveReady()?"Saving in a moment…":"Unsaved changes"; }
   else msg = state.updatedAt ? "Saved "+relTime(state.updatedAt) : "All changes saved";
@@ -1254,65 +1253,34 @@ function undo(){
   toast("Undid: "+step.label);
 }
 
-/* ---------- passcode (Netlify mode) ---------- */
-function loadViewCode(){
-  try{ return sessionStorage.getItem(VIEW_KEY) || localStorage.getItem(VIEW_KEY) || null; }catch(e){ return null; }
+/* ---------- the access code (Netlify mode) ----------
+   One code, entered once. Which one it is decides the role, and the role is the
+   server's answer, not this page's guess — everything below only changes what
+   is worth putting on screen. */
+function loadAccessCode(){
+  try{ return sessionStorage.getItem(CODE_KEY) || localStorage.getItem(CODE_KEY) || null; }catch(e){ return null; }
 }
-function rememberViewCode(v, forever){
-  viewCode=v;
+function rememberAccessCode(v, forever){
+  accessCode=v;
   try{
-    sessionStorage.setItem(VIEW_KEY,v);
-    if(forever) localStorage.setItem(VIEW_KEY,v); else localStorage.removeItem(VIEW_KEY);
+    sessionStorage.setItem(CODE_KEY,v);
+    if(forever) localStorage.setItem(CODE_KEY,v); else localStorage.removeItem(CODE_KEY);
   }catch(e){}
 }
-function forgetViewCode(){
-  viewCode=null;
-  try{ sessionStorage.removeItem(VIEW_KEY); localStorage.removeItem(VIEW_KEY); }catch(e){}
+function forgetAccessCode(){
+  accessCode=null; role=null;
+  try{ sessionStorage.removeItem(CODE_KEY); localStorage.removeItem(CODE_KEY); }catch(e){}
 }
-function loadPasscode(){
-  try{ return sessionStorage.getItem(PASS_KEY) || localStorage.getItem(PASS_KEY) || null; }catch(e){ return null; }
-}
-function rememberPasscode(v, forever){
-  passcode=v;
-  try{
-    sessionStorage.setItem(PASS_KEY,v);
-    if(forever) localStorage.setItem(PASS_KEY,v); else localStorage.removeItem(PASS_KEY);
-  }catch(e){}
-}
-function forgetPasscode(){
-  passcode=null;
-  try{ sessionStorage.removeItem(PASS_KEY); localStorage.removeItem(PASS_KEY); }catch(e){}
-  toast("Edit passcode forgotten on this device.");
-}
-function askPasscode(anchor, then){
-  var p=el("div");
-  p.appendChild(el("div","ttl","Editing this calendar needs the shared passcode."));
-  var inp=el("input"); inp.type="password"; inp.autocomplete="off"; inp.value=passcode||"";
-  p.appendChild(inp);
-  var remWrap=el("label"); remWrap.style.cssText="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--ink-2);padding:8px 4px 2px;";
-  var rem=el("input"); rem.type="checkbox"; rem.checked=true; rem.style.cssText="width:auto;padding:0;";
-  remWrap.appendChild(rem); remWrap.appendChild(el("span",null,"Remember on this device"));
-  p.appendChild(remWrap);
-  var btns=el("div","rowbtns");
-  var ok=el("button","btn sm primary","Unlock"); ok.style.flex="1";
-  var no=el("button","btn sm","Cancel");
-  function go(){
-    var v=inp.value.trim();
-    if(!v){ inp.focus(); return; }
-    rememberPasscode(v, rem.checked);
-    closePop();
-    if(then) then();
-  }
-  ok.onclick=go;
-  no.onclick=closePop;
-  inp.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); go(); } if(e.key==="Escape") closePop(); };
-  btns.appendChild(ok); btns.appendChild(no);
-  p.appendChild(btns);
-  popAt(anchor||$("#saveBtn"), p);
-  inp.focus(); inp.select();
+/* Admin does everything; a manager may change what people entered, but not the
+   shape of the calendar. The server enforces this either way. */
+function isAdmin(){ return MODE!=="netlify" || role==="admin"; }
+function roleLabel(){ return role==="manager" ? "Sales manager" : role==="admin" ? "Admin" : ""; }
+/* one place to say no, so every refusal reads the same */
+function adminOnly(what){
+  toast(what+" needs the admin code.", true);
 }
 
-function viewHeaders(){ return viewCode ? {"x-view-code":viewCode} : {}; }
+function viewHeaders(){ return accessCode ? {"x-access-code":accessCode} : {}; }
 
 /* ---------- storage backends ---------- */
 var Backend={
@@ -1351,19 +1319,23 @@ var Backend={
     async load(){
       if(bootState!==null){ var first=bootState; bootState=null; return first||null; }
       var r=await fetch(API,{cache:"no-store",headers:viewHeaders()});
-      if(r.status===401) throw {code:"view_code"};
+      if(r.status===401) throw {code:"access_code"};
       if(!r.ok) throw {code:"upstream_error",message:"The server returned "+r.status+"."};
       var j=await r.json();
-      requiresPasscode=!!j.requiresPasscode;
+      if(j.role) role=j.role;
       return j.state||null;
     },
     async save(next, force){
       var r=await fetch(API,{
         method:"PUT",
-        headers:{"content-type":"application/json","x-edit-passcode":passcode||"","x-view-code":viewCode||""},
+        headers:{"content-type":"application/json","x-access-code":accessCode||""},
         body:JSON.stringify({state:next, force:!!force})
       });
-      if(r.status===401){ requiresPasscode=true; throw {code:"passcode"}; }
+      if(r.status===401) throw {code:"access_code"};
+      if(r.status===403){
+        var jf=await r.json();
+        throw {code:"admin_only", message:jf.message, changed:jf.changed};
+      }
       if(r.status===409){
         var j=await r.json();
         throw {code:"conflict", live:j.state};
@@ -1386,7 +1358,6 @@ var Backend={
 async function save(force){
   force = force===true;
   if(saving||readOnly||!canSave) return;
-  if(MODE==="netlify" && requiresPasscode && !passcode){ askPasscode($("#saveBtn"), function(){ save(force); }); return; }
 
   saving=true; $("#saveBtn").disabled=true; paintSaveState();
   var prevRev=state.rev||0;
@@ -1412,10 +1383,19 @@ async function save(force){
 function handleSaveError(e){
   var code=e&&e.code, msg=e&&e.message;
 
-  if(code==="passcode"){
+  /* The role boundary, refused by the server. The page hides these controls
+     from a manager already, so getting here means something got out of step —
+     say plainly what was refused rather than "couldn't save". */
+  if(code==="admin_only"){
     setDirty(true);
-    askPasscode($("#saveBtn"), function(){ save(); });
-    toast("That passcode wasn't accepted.",true);
+    toast(msg || "That change needs the admin code.", true);
+    return;
+  }
+  if(code==="access_code"){
+    setDirty(true);
+    toast("That code is no longer accepted — sign in again.", true);
+    forgetAccessCode();
+    setTimeout(function(){ showGate("Enter the code again to carry on."); }, 900);
     return;
   }
   if(code==="conflict"){
@@ -1585,6 +1565,7 @@ function renderRoster(){
   var b=currentBranch(), list=$("#roster");
   $("#railTitle").textContent=branchName(b.code)+" Roster";
   $("#addRepBranch").textContent=b.code;
+  var addBox=$(".rail-add"); if(addBox) addBox.hidden=!isAdmin();
   var f=(ui.filter||"").trim().toLowerCase();
   var reps=b.reps.filter(function(r){ return !f || r.name.toLowerCase().indexOf(f)>=0; });
   $("#railCount").textContent = f ? reps.length+"/"+b.reps.length : String(b.reps.length);
@@ -1654,11 +1635,13 @@ function openRepMenu(anchor, rep){
   link.onclick=function(){ showRepLink(anchor,rep); };
   p.appendChild(link);
 
-  var rename=el("button",null,"Rename…");
-  rename.onclick=function(){ openRename(anchor,rep); };
-  p.appendChild(rename);
+  if(isAdmin()){
+    var rename=el("button",null,"Rename…");
+    rename.onclick=function(){ openRename(anchor,rep); };
+    p.appendChild(rename);
+  }
 
-  state.branches.filter(function(b){ return b.code!==ui.branch; }).forEach(function(b){
+  (isAdmin() ? state.branches.filter(function(b){ return b.code!==ui.branch; }) : []).forEach(function(b){
     /* a move across companies is a real thing to do, but it should never happen
        by accident — so it says which company it is landing in */
     var far=(b.division||"KQ")!==ui.division;
@@ -1693,9 +1676,13 @@ function openRepMenu(anchor, rep){
   };
   p.appendChild(clr);
 
-  var del=el("button","danger","Remove from "+ui.branch);
-  del.onclick=function(){ confirmRemove(anchor,rep); };
-  p.appendChild(del);
+  if(isAdmin()){
+    var del=el("button","danger","Remove from "+ui.branch);
+    del.onclick=function(){ confirmRemove(anchor,rep); };
+    p.appendChild(del);
+  }else{
+    p.appendChild(el("div","ttl","Renaming, moving and removing need the admin code."));
+  }
   popAt(anchor,p);
 }
 
@@ -1775,6 +1762,13 @@ function confirmRemove(anchor, rep){
 function openMoreMenu(anchor){
   var p=el("div");
 
+  if(MODE==="netlify" && role){
+    p.appendChild(el("div","ttl", isAdmin()
+      ? "Signed in as Admin — you can change anything."
+      : "Signed in as Sales manager — availability and approvals; the roster, blocked times and targets are admin's."));
+    p.appendChild(el("div","sep"));
+  }
+
   var cur=loadTheme();
   p.appendChild(el("div","ttl", cur==="system"
     ? "Appearance — following this device ("+(systemIsDark()?"dark":"light")+")"
@@ -1797,9 +1791,11 @@ function openMoreMenu(anchor){
   var exp=el("button",null,"Export backup (.json)");
   exp.onclick=function(){ closePop(); exportJSON(); };
   p.appendChild(exp);
-  var imp=el("button",null,"Import backup…");
-  imp.onclick=function(){ closePop(); importJSON(); };
-  p.appendChild(imp);
+  if(isAdmin()){
+    var imp=el("button",null,"Import backup…");
+    imp.onclick=function(){ closePop(); importJSON(); };
+    p.appendChild(imp);
+  }
   p.appendChild(el("div","sep"));
   var csv=el("button",null,"Export "+ui.branch+" coverage (.csv)");
   csv.onclick=function(){ closePop(); exportCSV(); };
@@ -1809,22 +1805,12 @@ function openMoreMenu(anchor){
     var reload=el("button",null,"Reload latest from server");
     reload.onclick=function(){ closePop(); loadLatest(); };
     p.appendChild(reload);
-    if(requiresPasscode){
-      var pc=el("button",null,passcode?"Change edit passcode…":"Enter edit passcode…");
-      pc.onclick=function(){ askPasscode(anchor); };
-      p.appendChild(pc);
-      if(passcode){
-        var fg=el("button",null,"Forget passcode on this device");
-        fg.onclick=function(){ closePop(); forgetPasscode(); paintSaveState(); render(); };
-        p.appendChild(fg);
-      }
-    }
-    if(requiresViewCode && viewCode){
+    if(requiresCode && accessCode){
       var fv=el("button",null,"Sign out of this device");
       fv.title="Forget the access code here — this device will ask for it again.";
       fv.onclick=function(){
         closePop();
-        forgetViewCode();
+        forgetAccessCode();
         location.reload();
       };
       p.appendChild(fv);
@@ -2755,7 +2741,7 @@ function viewBlocks(root){
   head.appendChild(l);
   root.appendChild(head);
 
-  if(!readOnly) root.appendChild(blockForm());
+  if(!readOnly && isAdmin()) root.appendChild(blockForm());
 
   var all=blockList();
   if(!all.length){
@@ -2789,7 +2775,7 @@ function viewBlocks(root){
     tr.appendChild(el("td","num", costOf(bl)));
 
     var td5=el("td");
-    if(!readOnly){
+    if(!readOnly && isAdmin()){
       var rm=el("button","btn sm danger","Remove");
       rm.onclick=function(){
         pushUndo("Remove block: "+blockLabel(bl));
@@ -3060,6 +3046,7 @@ window.addEventListener("beforeunload",function(e){
 
 function addRep(){
   if(readOnly){ toast("View-only access — the roster can't be changed.",true); return; }
+  if(!isAdmin()){ adminOnly("Adding a rep"); return; }
   var inp=$("#newRep"), name=inp.value.trim();
   if(!name) { inp.focus(); return; }
   var b=currentBranch();
@@ -3096,10 +3083,8 @@ async function detectBackend(){
       var j=await r.json();
       if(j && j.ok){
         MODE="netlify";
-        requiresViewCode=!!j.requiresViewCode;
-        requiresPasscode=!!j.requiresPasscode;
-        passcode=loadPasscode();
-        viewCode=loadViewCode();
+        requiresCode=!!j.requiresCode;
+        accessCode=loadAccessCode();
         return;
       }
     }
@@ -3123,12 +3108,14 @@ function showGate(msg){
 function hideGate(){ $("#gate").hidden=true; $("#app").hidden=false; }
 
 /* Ask the server whether this code is any good — the only way to find out. */
-async function tryViewCode(code){
-  var r=await fetch(API,{cache:"no-store",headers:{"x-view-code":code}});
+/* Returns the state on success and null when the code is wrong. The reply also
+   carries the role — admin or manager — which is what the page keys off. */
+async function tryAccessCode(code){
+  var r=await fetch(API,{cache:"no-store",headers:{"x-access-code":code}});
   if(r.status===401) return null;
   if(!r.ok) throw new Error("The server returned "+r.status+".");
   var j=await r.json();
-  requiresPasscode=!!j.requiresPasscode;
+  role = j.role || null;
   return j.state || null;
 }
 
@@ -3139,7 +3126,7 @@ $("#gateForm").onsubmit=async function(ev){
   box.disabled=true; $("#gateGo").disabled=true; $("#gateErr").hidden=true;
   var got=null;
   try{
-    got=await tryViewCode(code);
+    got=await tryAccessCode(code);
   }catch(e){
     showGate("Couldn't reach the calendar — "+(e.message||"try again in a moment."));
     return;
@@ -3149,7 +3136,7 @@ $("#gateForm").onsubmit=async function(ev){
     box.value="";
     return;
   }
-  rememberViewCode(code, $("#gateRemember").checked);
+  rememberAccessCode(code, $("#gateRemember").checked);
   hideGate();
   startApp(got);
 };
@@ -3161,14 +3148,14 @@ async function boot(){
 
   await detectBackend();
 
-  if(MODE==="netlify" && requiresViewCode){
+  if(MODE==="netlify" && requiresCode){
     /* a code remembered from last time saves the reader typing it again */
-    if(viewCode){
+    if(accessCode){
       try{
-        var known=await tryViewCode(viewCode);
+        var known=await tryAccessCode(accessCode);
         if(known){ hideGate(); startApp(known); return; }
       }catch(e){}
-      forgetViewCode();
+      forgetAccessCode();
     }
     showGate(null);
     return;
