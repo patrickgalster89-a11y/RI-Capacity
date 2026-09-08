@@ -545,6 +545,44 @@ button.dayhead:disabled{cursor:default;}
   background:var(--surface-2);
 }
 
+/* ---------- coverage board ----------
+   Deliberately plain: the scheduling team reads a grid of numbers, so this is a
+   grid of numbers. Colour is spent only on the two things worth spotting — a
+   slot nobody has offered, and a slot nobody can be booked into at all. */
+.weeknav{display:flex;align-items:center;gap:8px;}
+.weeklab{display:flex;flex-direction:column;align-items:center;min-width:132px;line-height:1.25;}
+.weeklab .n{font-family:"Archivo",sans-serif;font-weight:700;font-size:12.5px;}
+.weeklab .rng{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);}
+.covtbl{min-width:900px;}
+.covtbl th.covday{text-align:center;padding:8px 6px;}
+.covtbl th.covday .dnum{font-family:"IBM Plex Mono",monospace;font-size:15px;font-weight:600;color:var(--ink);letter-spacing:0;text-transform:none;}
+.covtbl th.covday .ddow{font-size:9.5px;letter-spacing:.1em;color:var(--ink-3);}
+.covtbl th.covday.wknd .dnum,.covtbl th.covday.wknd .ddow{color:var(--prime);}
+.covtbl td.covrow{
+  font-family:"Archivo",sans-serif;font-weight:600;font-size:11.5px;
+  white-space:nowrap;color:var(--ink-2);width:190px;padding-left:14px;
+  position:sticky;left:0;z-index:2;background:var(--surface);
+}
+.covtbl td.covrow.slotrow{font-weight:500;font-size:11px;color:var(--ink-3);padding-left:22px;}
+.covtbl tr.brow td{background:var(--surface-2);border-bottom:1px solid var(--line-strong);}
+.covtbl tr.brow td.covrow{font-size:12.5px;color:var(--ink);}
+.covtbl td.covcell{text-align:center;padding:5px 6px;}
+.covtbl td.covcell .hv{font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-variant-numeric:tabular-nums;}
+.covtbl td.covcell .hn{font-size:9px;color:var(--ink-3);margin-top:1px;}
+.covtbl td.covcell.nil .hv,.covtbl td.covcell.nil .hn{color:var(--ink-3);}
+.hcell{
+  width:100%;padding:5px 4px;border-radius:5px;border:1px solid transparent;
+  font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-variant-numeric:tabular-nums;
+  transition:background .1s,border-color .1s;
+}
+.hcell:hover{background:var(--surface-3);border-color:var(--line-strong);}
+.hcell[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:-1px;}
+td.covcell.prime .hcell{color:var(--prime);}
+td.covcell.hole .hcell{background:var(--crit-soft);border-color:var(--crit-soft);color:var(--crit);}
+td.covcell.hole.prime .hcell{color:var(--crit);}
+td.covcell.nil .hcell{color:var(--ink-3);background:var(--surface-2);}
+.covnote{display:flex;gap:22px;flex-wrap:wrap;margin-top:9px;font-size:11.5px;color:var(--ink-3);}
+
 /* ---------- tables ---------- */
 .tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow-x:auto;}
 table{border-collapse:collapse;width:100%;min-width:720px;}
@@ -1021,6 +1059,11 @@ function Q(){
 }
 /* The quarter grids run a week or two past the month, so "the current month" is
    the one whose own key matches today — not whichever month the grid starts in. */
+function defaultCovWeek(){
+  var today=fmtISO(new Date()), weeks=quarterWeeks(), hit=-1;
+  weeks.forEach(function(w,i){ if(hit<0 && w.days.indexOf(today)>=0) hit=i; });
+  return hit<0 ? 0 : hit;
+}
 function defaultMonthKey(q){
   var now=new Date();
   var key=now.getFullYear()+"-"+(now.getMonth()<9?"0":"")+(now.getMonth()+1);
@@ -1111,7 +1154,7 @@ function readSeed(){
 function isNarrow(){ return window.matchMedia("(max-width:900px)").matches; }
 function loadUI(){
   var wide=!isNarrow();
-  var d={division:"KQ",branch:"SYR",repId:null,view:"calendar",quarter:null,month:null,cov:null,covSel:null,filter:"",
+  var d={division:"KQ",branch:"SYR",repId:null,view:"calendar",quarter:null,month:null,cov:null,covWeek:null,covSel:null,filter:"",
          panels:{key:wide, dayoff:wide}};
   try{
     var raw=sessionStorage.getItem(UI_KEY);
@@ -1458,6 +1501,9 @@ function syncQuarterUI(){
   var keys=Q().months.map(function(m){ return m.key; });
   if(keys.indexOf(ui.month)<0) ui.month=defaultMonthKey(Q());
   if(keys.indexOf(ui.cov)<0) ui.cov=defaultMonthKey(Q());
+  /* coverage steps through the quarter a week at a time; open on the week that
+     contains today where the quarter has one, else its first */
+  if(typeof ui.covWeek!=="number" || !(ui.covWeek>=0)) ui.covWeek=defaultCovWeek();
   /* a restore, import or removal can leave these pointing at things that are gone */
   if(!divisionList().some(function(d){ return d.code===ui.division; })) ui.division=divisionList()[0].code;
   if(!state.branches.some(function(b){ return b.code===ui.branch; })) ui.branch=state.branches[0].code;
@@ -1482,7 +1528,7 @@ function renderQuarterPicker(){
 function setQuarter(id){
   ui.quarter=id; ui.covSel=null;
   var k=defaultMonthKey(Q());
-  ui.month=k; ui.cov=k;
+  ui.month=k; ui.cov=k; ui.covWeek=defaultCovWeek();
   stashUI(); render();
 }
 function stepQuarter(delta){
@@ -2481,120 +2527,206 @@ function setStat(node,value,target){
 }
 
 /* ---------- coverage ---------- */
+/* ---------- branch coverage ----------
+   Read as hours, not heads: an appointment slot is two hours long, so a branch
+   with fifteen inspectors can offer thirty hours in a slot. Every branch in the
+   company is stacked in one board, a week at a time — the shape the scheduling
+   team already reads.
+
+   Capacity is the whole roster; being off does not shrink what the branch could
+   offer, it shrinks what it is offering. A company block is the exception: if
+   nobody may be booked then, the slot is not capacity at all, and reads 0 of 0. */
+var SLOT_HOURS = 2;
+var SLOT_CLOCK = { AM:"10:00 AM – 12:00 PM", MID:"2:00 PM – 4:00 PM", PM:"6:00 PM – 8:00 PM" };
+
+/* the quarter's fifteen weeks, back to back */
+function quarterWeeks(){
+  var out=[], seen={};
+  Q().months.forEach(function(m){
+    weeksOf(m).forEach(function(days){
+      if(seen[days[0]]) return;
+      seen[days[0]]=1;
+      out.push({days:days, month:m});
+    });
+  });
+  return out;
+}
+/* hours offered against hours possible, for one branch in one slot on one day */
+function slotHours(b, iso, slot){
+  if(blockAt(b.code, iso, slot)) return {avail:0, cap:0};
+  var n=0;
+  b.reps.forEach(function(r){ if(isAvailable(r,iso,slot,b.code)) n++; });
+  return {avail:n*SLOT_HOURS, cap:b.reps.length*SLOT_HOURS};
+}
+function dayHours(b, iso){
+  var a=0,c=0;
+  SLOTS.forEach(function(s){ var h=slotHours(b,iso,s); a+=h.avail; c+=h.cap; });
+  return {avail:a, cap:c};
+}
+
 function viewCoverage(root){
-  var b=currentBranch(), month=monthByKey(ui.cov);
+  var weeks=quarterWeeks();
+  if(typeof ui.covWeek!=="number" || !(ui.covWeek>=0) || ui.covWeek>=weeks.length) ui.covWeek=defaultCovWeek();
+  var wk=weeks[ui.covWeek], days=wk.days;
+  var mine=branchesIn(ui.division);
+
   var head=el("div","pagehead");
   var l=el("div");
-  l.appendChild(el("div","eyebrow",divisionLabel(ui.division)+" · "+branchTitle(b.code)+" · "+Q().label));
+  l.appendChild(el("div","eyebrow",divisionLabel(ui.division)+" · "+Q().label));
   l.appendChild(el("h2",null,"Branch coverage"));
-  l.appendChild(el("div","sub","How many reps are available in each slot. Click a cell to see who."));
+  l.appendChild(el("div","sub","Hours offered against hours possible, for every branch. Each appointment slot is "+SLOT_HOURS+" hours. Click a cell to see who."));
   head.appendChild(l);
+
+  var nav=el("div","weeknav");
+  var prev=el("button","btn sm","‹");
+  prev.setAttribute("aria-label","Previous week");
+  prev.disabled = ui.covWeek<=0;
+  prev.onclick=function(){ ui.covWeek--; ui.covSel=null; stashUI(); render(); };
+  var lab=el("div","weeklab");
+  lab.appendChild(el("span","n","Week "+(ui.covWeek+1)+" of "+weeks.length));
+  lab.appendChild(el("span","rng",shortDate(parseDate(days[0]))+" – "+shortDate(parseDate(days[6]))));
+  var next=el("button","btn sm","›");
+  next.setAttribute("aria-label","Next week");
+  next.disabled = ui.covWeek>=weeks.length-1;
+  next.onclick=function(){ ui.covWeek++; ui.covSel=null; stashUI(); render(); };
+  nav.appendChild(prev); nav.appendChild(lab); nav.appendChild(next);
+  head.appendChild(nav);
+  root.appendChild(head);
+
+  /* jump a month at a time as well as a week at a time */
   var months=el("div","months");
   Q().months.forEach(function(m){
     var btn=el("button",null,m.short);
-    btn.setAttribute("aria-pressed", m.key===month.key?"true":"false");
-    btn.onclick=function(){ ui.cov=m.key; ui.covSel=null; stashUI(); render(); };
+    var firstOfMonth=-1;
+    weeks.forEach(function(w,i){ if(w.month.key===m.key && firstOfMonth<0) firstOfMonth=i; });
+    btn.setAttribute("aria-pressed", wk.month.key===m.key ? "true":"false");
+    btn.onclick=function(){ ui.covWeek=Math.max(0,firstOfMonth); ui.covSel=null; stashUI(); render(); };
     months.appendChild(btn);
   });
-  head.appendChild(months);
-  root.appendChild(head);
+  root.appendChild(months);
 
-  if(!b.reps.length){
+  if(!mine.length || !mine.some(function(b){ return b.reps.length; })){
     var e=el("div","empty");
     e.appendChild(el("h3",null,"Nothing to roll up yet"));
-    e.appendChild(el("p",null,"Add reps to "+b.code+" and their availability stacks up here as a coverage map."));
+    e.appendChild(el("p",null,"Add reps to a branch and the hours they can offer stack up here."));
     root.appendChild(e); return;
   }
 
-  var weeks=weeksOf(month);
-  var counts={}, max=0, totalSlots=0, primeSlots=0, thin=[];
-  weeks.forEach(function(days){
+  /* week totals across the company, for the strip at the top */
+  var wAvail=0, wCap=0, wPrimeA=0, wPrimeC=0, empties=0;
+  mine.forEach(function(b){
     days.forEach(function(iso){
       SLOTS.forEach(function(s){
-        var n=0;
-        b.reps.forEach(function(r){ if(isAvailable(r,iso,s,b.code)) n++; });
-        counts[slotKey(iso,s)]=n;
-        if(n>max) max=n;
-        totalSlots+=n;
-        if(isPrime(iso,s)) primeSlots+=n;
-        if(isPrime(iso,s) && n===0) thin.push(iso+"|"+s);
+        var h=slotHours(b,iso,s);
+        wAvail+=h.avail; wCap+=h.cap;
+        if(isPrime(iso,s)){ wPrimeA+=h.avail; wPrimeC+=h.cap; }
+        if(h.cap>0 && h.avail===0) empties++;
       });
     });
   });
-
   var sum=el("div","msum");
-  var primeCount=0;
-  weeks.forEach(function(days){ days.forEach(function(iso){ SLOTS.forEach(function(s){ if(isPrime(iso,s)) primeCount++; }); }); });
-  sum.appendChild(kpi("Rep-slots covered", totalSlots, "in "+month.short));
-  sum.appendChild(kpi("Prime rep-slots", primeSlots, "in "+month.short));
-  sum.appendChild(kpi("Peak in one slot", max, max===1?"rep at once":"reps at once"));
-  sum.appendChild(kpi("Uncovered prime slots", thin.length, "of "+primeCount));
+  sum.appendChild(kpi("Hours offered", wAvail, "of "+wCap+" possible"));
+  sum.appendChild(kpi("Prime hours", wPrimeA, "of "+wPrimeC+" possible"));
+  sum.appendChild(kpi("Slots with nobody", empties, "across "+mine.length+" branch"+(mine.length===1?"":"es")));
+  sum.appendChild(kpi("Branches", mine.length, mine.reduce(function(n,b){ return n+b.reps.length; },0)+" reps in all"));
   root.appendChild(sum);
 
-  var hm=el("div","hm"), scroll=el("div","hmscroll"), inner=el("div","hmin");
-  weeks.forEach(function(days,wi){
-    var wk=el("div","hmweek");
-    var lab=el("div","wlab","Week "+(wi+1)+" · "+shortDate(parseDate(days[0]))+" – "+shortDate(parseDate(days[6])));
-    wk.appendChild(lab);
-    wk.appendChild(el("div","rl",""));
+  /* the board itself */
+  var wrap=el("div","tablewrap"), tbl=el("table","covtbl");
+  var thead=el("thead"), hr=el("tr");
+  hr.appendChild(el("th","covrow",""));
+  days.forEach(function(iso){
+    var d=parseDate(iso), wknd=d.getDay()===0||d.getDay()===6;
+    var th=el("th","covday"+(wknd?" wknd":""));
+    th.appendChild(el("div","dnum",String(d.getDate())));
+    th.appendChild(el("div","ddow",DOW[d.getDay()].toUpperCase()));
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr); tbl.appendChild(thead);
+
+  var tb=el("tbody");
+  mine.forEach(function(b){
+    /* the branch's own line: its day totals, the way the scheduling board reads */
+    var br=el("tr","brow");
+    var name=el("td","covrow");
+    name.appendChild(el("span",null,branchName(b.code)+" Sales"));
+    br.appendChild(name);
     days.forEach(function(iso){
-      var d=parseDate(iso), wknd=d.getDay()===0||d.getDay()===6;
-      wk.appendChild(el("div","dh"+(wknd?" wknd":""), DOW[d.getDay()]+" "+d.getDate()));
+      var h=dayHours(b,iso);
+      var td=el("td","covcell"+(h.cap===0?" nil":""));
+      td.appendChild(el("div","hv",h.avail+" of "+h.cap));
+      td.appendChild(el("div","hn","hours available"));
+      br.appendChild(td);
+    });
+    tb.appendChild(br);
+
+    /* A branch that has entered nothing at all this week has not got holes, it
+       has not started — flagging all twenty-one cells says nothing useful. */
+    var started=days.some(function(iso){
+      return SLOTS.some(function(s){ return slotHours(b,iso,s).avail>0; });
     });
     SLOTS.forEach(function(s){
-      wk.appendChild(el("div","rl",s));
+      var tr=el("tr");
+      tr.appendChild(el("td","covrow slotrow",SLOT_CLOCK[s]));
       days.forEach(function(iso){
-        var n=counts[slotKey(iso,s)], prime=isPrime(iso,s);
-        var c=el("button","hmcell"+(n===0?" z":""), n===0?"·":String(n));
-        if(n>0){
-          var t=max?n/max:0;
-          var base=prime?"var(--prime)":"var(--std)";
-          c.style.background="color-mix(in srgb, "+base+" "+Math.round(18+t*82)+"%, var(--surface))";
-          c.style.borderColor=prime?"var(--prime-edge)":"var(--std-edge)";
-          c.style.color = t>0.55 ? (prime?"var(--prime-ink)":"var(--std-ink)") : "var(--ink)";
-        }
-        var key=slotKey(iso,s);
-        c.setAttribute("aria-pressed", ui.covSel===key?"true":"false");
-        c.title=DOW[d0(iso)]+" "+shortDate(parseDate(iso))+" "+s+(prime?" · prime":"")+" — "+n+" rep"+(n===1?"":"s");
-        c.onclick=function(){ ui.covSel = ui.covSel===key?null:key; stashUI(); render(); };
-        wk.appendChild(c);
+        var h=slotHours(b,iso,s);
+        var key=b.code+"|"+iso+"|"+s;
+        var td=el("td","covcell");
+        if(h.cap===0) td.classList.add("nil");
+        else if(h.avail===0 && started) td.classList.add("hole");
+        if(isPrime(iso,s)) td.classList.add("prime");
+        var btn=el("button","hcell", h.avail+" of "+h.cap);
+        btn.setAttribute("aria-pressed", ui.covSel===key?"true":"false");
+        btn.title = branchTitle(b.code)+" · "+DOW_FULL[d0(iso)]+" "+shortDate(parseDate(iso))+" · "
+          +SLOT_CLOCK[s]+(isPrime(iso,s)?" · prime":"")
+          +" — "+h.avail+" of "+h.cap+" hours"
+          +(h.cap===0?" (blocked for everyone)":"");
+        btn.onclick=function(){ ui.covSel = ui.covSel===key?null:key; stashUI(); render(); };
+        td.appendChild(btn);
+        tr.appendChild(td);
       });
+      tb.appendChild(tr);
     });
-    inner.appendChild(wk);
   });
-  scroll.appendChild(inner);
-  hm.appendChild(scroll);
+  tbl.appendChild(tb); wrap.appendChild(tbl);
+  root.appendChild(wrap);
 
-  var sc=el("div","hmscale");
-  sc.appendChild(el("span","eyebrow","Reps available"));
-  var steps=el("span","steps");
-  [0,.25,.5,.75,1].forEach(function(t){
-    var i=el("i");
-    i.style.background = t===0 ? "var(--surface-2)" : "color-mix(in srgb, var(--std) "+Math.round(18+t*82)+"%, var(--surface))";
-    steps.appendChild(i);
-  });
-  sc.appendChild(steps);
-  sc.appendChild(el("span","lg","0 → "+max));
-  sc.appendChild(el("span","lg","Amber cells are prime time (weekend, or weekday PM)."));
-  hm.appendChild(sc);
-  root.appendChild(hm);
+  var legend=el("div","covnote");
+  legend.appendChild(el("span",null,"Each slot is "+SLOT_HOURS+" hours per rep, so a branch of "+
+    mine[0].reps.length+" can offer "+(mine[0].reps.length*SLOT_HOURS)+" hours in one slot."));
+  legend.appendChild(el("span",null,"0 of 0 means the slot is blocked for everyone — nobody can be booked."));
+  root.appendChild(legend);
 
   if(ui.covSel){
-    var parts=ui.covSel.split("|"), iso=parts[0], slot=parts[1];
-    var who=b.reps.filter(function(r){ return isAvailable(r,iso,slot,b.code); });
+    var parts=ui.covSel.split("|"), code=parts[0], iso=parts[1], slot=parts[2];
+    var b2=branchByCode(code);
+    var who=b2.reps.filter(function(r){ return isAvailable(r,iso,slot,code); });
+    var h=slotHours(b2,iso,slot);
     var det=el("div","detail");
-    det.appendChild(el("div","eyebrow","Available · "+DOW[d0(iso)]+" "+shortDate(parseDate(iso))+" · "+slot+(isPrime(iso,slot)?" · prime":"")));
-    det.appendChild(el("h3",null, who.length+" of "+b.reps.length+" reps"));
+    det.appendChild(el("div","eyebrow",branchTitle(code)+" · "+DOW_FULL[d0(iso)]+" "+shortDate(parseDate(iso))
+      +" · "+SLOT_CLOCK[slot]+(isPrime(iso,slot)?" · prime":"")));
+    det.appendChild(el("h3",null, h.avail+" of "+h.cap+" hours — "+who.length+" of "+b2.reps.length+" reps"));
     var chips=el("div","chips");
-    if(!who.length) chips.appendChild(el("span","chip","Nobody is available in this slot."));
+    if(!who.length) chips.appendChild(el("span","chip", h.cap===0
+      ? "This slot is blocked for everyone."
+      : "Nobody is available in this slot."));
     who.forEach(function(r){
       var ch=el("button","chip",r.name);
-      ch.onclick=function(){ ui.repId=r.id; ui.view="calendar"; ui.month=month.key; stashUI(); render(); };
+      ch.onclick=function(){
+        ui.branch=code; ui.repId=r.id; ui.view="calendar"; ui.month=monthOfDate(iso);
+        stashUI(); render();
+      };
       chips.appendChild(ch);
     });
     det.appendChild(chips);
     root.appendChild(det);
   }
+}
+/* which month of the quarter a date is shown under */
+function monthOfDate(iso){
+  var hit=null;
+  Q().months.forEach(function(m){ if(!hit && monthDates(m).indexOf(iso)>=0) hit=m.key; });
+  return hit || ui.month;
 }
 function d0(iso){ return parseDate(iso).getDay(); }
 function kpi(label, value, note){

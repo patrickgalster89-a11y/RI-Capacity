@@ -11,7 +11,9 @@ coverage, who has hit their monthly requirement, and every time-off request in o
   two never share a view — roster, coverage, compliance and time off all follow the branch
   you are on
 - **Quarters covered:** Q3 2026 → Q4 2027
-- **Slots:** AM / MID / PM, seven days a week
+- **Slots:** three appointment windows a day, seven days a week — 10:00–12:00, 2:00–4:00
+  and 6:00–8:00, two hours each. Stored as `AM` / `MID` / `PM`; the clock times are what
+  Branch Coverage shows
 - **Prime time:** any weekend slot, or a weekday PM
 - **Targets:** 12 total + 5 prime per week; 50 total + 25 prime per month
 - **Days off:** a rep blocks a whole weekday every week, or clicks any single date to block just that day
@@ -134,6 +136,13 @@ branch switcher and admin tabs hidden, so the only thing on screen is their cale
 tap slots — or drag across a row to fill several — and the page saves itself a couple of
 seconds after they stop. When a month meets its target they press **Submit**.
 
+**Branch coverage reads in hours.** An appointment slot is two hours, so a branch of eight
+can offer sixteen hours in one slot and forty-eight across a day. The board stacks every
+branch in the company, a week at a time, the way the scheduling team's own screen does:
+each branch gets a totals row and its three slot rows. A slot nobody has offered is flagged,
+unless the branch has entered nothing at all that week — that is not a hole, it is a branch
+that has not started. `0 of 0` means the slot is blocked for everyone.
+
 **For an admin.** The full app: roster on the left (a drawer on narrow screens), five
 tabs, every branch and quarter. **Blocked Times** is where you close a slot for
 everybody — see below. The ⋯ menu beside each rep gives you their personal link,
@@ -148,8 +157,9 @@ Ctrl/Cmd-Z undoes, Esc closes menus and the drawer.
 
 **Where it opens.** Light, and on the current month — so somebody opening it in September
 lands on September, not on the first month of the quarter. If today falls outside the
-quarter on screen it falls back to that quarter's first month. Coverage keeps its own month
-so an admin can compare one month's map against another rep's calendar.
+quarter on screen it falls back to that quarter's first month. Branch coverage keeps its own
+place in the quarter — it opens on the week containing today — so you can hold a week's
+board next to somebody's calendar without losing either.
 
 **Light and dark.** ⋯ → **Appearance** — Light, Dark, or System. It opens light whatever
 the device is set to, because that is what people expect of a work tool on a shared laptop;
